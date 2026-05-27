@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { INVENTORY_REPOSITORY } from './application/ports/inventory.repository';
 import { AdjustStockUseCase } from './application/use-cases/adjust-stock.use-case';
+import { CreateStockUseCase, GetStockByIdUseCase } from './application/use-cases/create-stock.use-case';
 import { ListStockUseCase, SummaryBySkuUseCase } from './application/use-cases/read-stock.use-case';
 import { ReleaseStockUseCase } from './application/use-cases/release-stock.use-case';
 import { ReserveStockUseCase } from './application/use-cases/reserve-stock.use-case';
@@ -17,6 +18,8 @@ import { TypeOrmInventoryRepository } from './infrastructure/persistence/typeorm
     ReleaseStockUseCase,
     AdjustStockUseCase,
     ListStockUseCase,
+    GetStockByIdUseCase,
+    CreateStockUseCase,
     SummaryBySkuUseCase,
   ],
   controllers: [InventoryController],

@@ -32,9 +32,20 @@ export const INVENTORY_REPOSITORY = Symbol('INVENTORY_REPOSITORY');
  * operations in a transaction and acquire row-level locks (SELECT ... FOR
  * UPDATE) so concurrent reserve/release/adjust operations are serialized.
  */
+export interface CreateInventoryInput {
+  productSku: string;
+  providerSku: string;
+  providerBranchId: number;
+  stock?: number;
+  reservedStock?: number;
+}
+
 export interface InventoryRepository {
   list(filter: InventoryFilter): Promise<InventoryListItem[]>;
+  findById(id: number): Promise<InventoryListItem | null>;
   summaryBySku(sku: string): Promise<InventorySummary>;
+  create(input: CreateInventoryInput): Promise<InventoryListItem>;
+  findBySkuAndBranch(productSku: string, providerBranchId: number): Promise<InventoryListItem | null>;
   /**
    * Loads an inventory row with a row-level lock, applies the mutation,
    * then persists the new state — all in a single transaction.

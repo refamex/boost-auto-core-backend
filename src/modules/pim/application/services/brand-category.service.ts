@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { BrandCategoryEntity } from '../../domain/entities/brand-category.entity';
 import { CreateBrandCategoryDto } from '../../infrastructure/http/dto/taxonomies.dto';
 
@@ -12,7 +12,7 @@ export class BrandCategoryService {
   ) {}
 
   list(brandCode?: string, categoryCode?: string): Promise<BrandCategoryEntity[]> {
-    const where: Partial<BrandCategoryEntity> = {};
+    const where: FindOptionsWhere<BrandCategoryEntity> = {};
     if (brandCode) where.brandCode = brandCode;
     if (categoryCode) where.categoryCode = categoryCode;
     return this.repo.find({ where, order: { brandCode: 'ASC' } });

@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { CategoryComplementEntity } from '../../domain/entities/category-complement.entity';
 import { CreateCategoryComplementDto } from '../../infrastructure/http/dto/taxonomies.dto';
 
@@ -12,7 +12,7 @@ export class CategoryComplementService {
   ) {}
 
   list(categoryIndexId?: number): Promise<CategoryComplementEntity[]> {
-    const where: Partial<CategoryComplementEntity> = {};
+    const where: FindOptionsWhere<CategoryComplementEntity> = {};
     if (categoryIndexId) where.categoryIndexId = categoryIndexId;
     return this.repo.find({
       where,

@@ -14,13 +14,19 @@ import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface
 import { AdjustStockUseCase } from '../../application/use-cases/adjust-stock.use-case';
 import { ReleaseStockUseCase } from '../../application/use-cases/release-stock.use-case';
 import { ReserveStockUseCase } from '../../application/use-cases/reserve-stock.use-case';
+import {
+  CreateStockUseCase,
+  GetStockByIdUseCase,
+} from '../../application/use-cases/create-stock.use-case';
 import { ListStockUseCase, SummaryBySkuUseCase } from '../../application/use-cases/read-stock.use-case';
 import {
   AdjustStockDto,
+  CreateInventoryDto,
   InventoryQueryDto,
   ReleaseStockDto,
   ReserveStockDto,
 } from './dto/inventory.dto';
+import { InventoryListItem } from '../../application/ports/inventory.repository';
 import { Inventory } from '../../domain/inventory.aggregate';
 
 @ApiTags('inventory')
@@ -29,6 +35,8 @@ import { Inventory } from '../../domain/inventory.aggregate';
 export class InventoryController {
   constructor(
     private readonly listStock: ListStockUseCase,
+    private readonly getStockById: GetStockByIdUseCase,
+    private readonly createStock: CreateStockUseCase,
     private readonly summaryBySku: SummaryBySkuUseCase,
     private readonly reserveStock: ReserveStockUseCase,
     private readonly releaseStock: ReleaseStockUseCase,
@@ -49,6 +57,18 @@ export class InventoryController {
   @Roles('inventory:read')
   summary(@Param('sku') sku: string) {
     return this.summaryBySku.execute(sku);
+  }
+
+  @Get(':id')
+  @Roles('inventory:read')
+  findById(@Param('id', ParseIntPipe) id: number) {
+    return this.getStockById.execute(id);
+  }
+
+  @Post()
+  @Roles('inventory:write')
+  create(@Body() dto: CreateInventoryDto) {
+    return this.createStock.execute(dto);
   }
 
   @Post(':id/reserve')
@@ -78,13 +98,28 @@ export class InventoryController {
 
   private toView(inv: Inventory) {
     const snap = inv.toSnapshot();
-    return {
+    return this.listItemView({
       id: snap.id,
       productSku: snap.productSku,
+      providerSku: snap.providerSku,
       providerBranchId: snap.providerBranchId,
       stock: snap.stock,
       reservedStock: snap.reservedStock,
       available: inv.available,
+      updatedAt: new Date(),
+    });
+  }
+
+  private listItemView(item: InventoryListItem) {
+    return {
+      id: item.id,
+      productSku: item.productSku,
+      providerSku: item.providerSku,
+      providerBranchId: item.providerBranchId,
+      stock: item.stock,
+      reservedStock: item.reservedStock,
+      available: item.available,
+      updatedAt: item.updatedAt,
     };
   }
 }
