@@ -8,6 +8,15 @@ import { HealthModule } from './shared/health/health.module';
 import { PimModule } from './modules/pim/pim.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
+import { VehiclesModule } from './modules/vehicles/vehicles.module';
+import { CompatibilityModule } from './modules/compatibility/compatibility.module';
+import { CommerceModule } from './modules/commerce/commerce.module';
+import { OrdersModule } from './modules/orders/orders.module';
+import { SalesModule } from './modules/sales/sales.module';
+import { BillingModule } from './modules/billing/billing.module';
+import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { PaymentsModule } from './modules/payments/payments.module';
+import { ShippingModule } from './modules/shipping/shipping.module';
 
 @Module({
   imports: [
@@ -41,6 +50,15 @@ import { InventoryModule } from './modules/inventory/inventory.module';
     PimModule,
     SuppliersModule,
     InventoryModule,
+    VehiclesModule,
+    CompatibilityModule,
+    CommerceModule,
+    OrdersModule,
+    SalesModule,
+    BillingModule,
+    IntegrationsModule,
+    PaymentsModule,
+    ShippingModule,
   ],
 })
 export class AppModule {}

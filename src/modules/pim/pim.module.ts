@@ -25,6 +25,7 @@ import {
   ProductImageService,
 } from './application/services/product-children.service';
 import { ProductService } from './application/services/product.service';
+import { VolumeCategoryService } from './application/services/volume-category.service';
 import { AutoPartController } from './infrastructure/http/auto-part.controller';
 import { BrandCategoryController } from './infrastructure/http/brand-category.controller';
 import { BrandController } from './infrastructure/http/brand.controller';

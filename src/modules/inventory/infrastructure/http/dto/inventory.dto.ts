@@ -32,6 +32,38 @@ export class ReserveStockDto {
 
 export class ReleaseStockDto extends ReserveStockDto {}
 
+export class CreateInventoryDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  productSku!: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  providerSku!: string;
+
+  @ApiProperty()
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  providerBranchId!: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  @Type(() => Number)
+  stock?: number;
+
+  @ApiPropertyOptional({ default: 0 })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  @Type(() => Number)
+  reservedStock?: number;
+}
+
 export class AdjustStockDto {
   @ApiProperty({ description: 'Positive to add, negative to subtract' })
   @IsInt()

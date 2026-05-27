@@ -9,7 +9,7 @@ import { DomainExceptionFilter } from './shared/common/filters/domain-exception.
 import { LoggingInterceptor } from './shared/common/interceptors/logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create(AppModule, { bufferLogs: false, rawBody: true });
 
   app.use(helmet());
   app.enableCors();
@@ -28,7 +28,7 @@ async function bootstrap() {
 
   const swagger = new DocumentBuilder()
     .setTitle('AutoBoost Core API')
-    .setDescription('PIM + Suppliers + Inventory (MVP slice)')
+    .setDescription('PIM + Suppliers + Inventory + Vehicles + Compatibility + Commerce + Orders + Sales + Billing + Integrations + Payments (Polar)')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

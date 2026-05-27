@@ -23,6 +23,9 @@ const buildMockRepo = (initialStock: number, initialReserved: number): Inventory
   let aggregate = makeAggregate(initialStock, initialReserved);
   return {
     list: jest.fn(),
+    findById: jest.fn(),
+    findBySkuAndBranch: jest.fn(),
+    create: jest.fn(),
     summaryBySku: jest.fn(),
     mutate: jest.fn(async (id: number, fn) => {
       if (id !== 42) throw new InventoryNotFoundError(id);

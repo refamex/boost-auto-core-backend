@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { DataSource } from 'typeorm';
+import { ConflictException, Injectable } from '@nestjs/common';
+import { DataSource, QueryFailedError } from 'typeorm';
 import {
+  CreateInventoryInput,
   InventoryFilter,
   InventoryListItem,
   InventoryRepository,
@@ -31,7 +32,11 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     }
 
     const rows = await qb.getMany();
-    return rows.map((r) => ({
+    return rows.map((r) => this.toListItem(r));
+  }
+
+  private toListItem(r: InventoryEntity): InventoryListItem {
+    return {
       id: r.id,
       productSku: r.productSku,
       providerSku: r.providerSku,
@@ -40,7 +45,43 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
       reservedStock: r.reservedStock,
       available: r.stock - r.reservedStock,
       updatedAt: r.updatedAt,
-    }));
+    };
+  }
+
+  async findById(id: number): Promise<InventoryListItem | null> {
+    const row = await this.dataSource.getRepository(InventoryEntity).findOne({ where: { id } });
+    if (!row) return null;
+    return this.toListItem(row);
+  }
+
+  async findBySkuAndBranch(
+    productSku: string,
+    providerBranchId: number,
+  ): Promise<InventoryListItem | null> {
+    const row = await this.dataSource.getRepository(InventoryEntity).findOne({
+      where: { productSku, providerBranchId },
+    });
+    return row ? this.toListItem(row) : null;
+  }
+
+  async create(input: CreateInventoryInput): Promise<InventoryListItem> {
+    try {
+      const row = await this.dataSource.getRepository(InventoryEntity).save(
+        this.dataSource.getRepository(InventoryEntity).create({
+          productSku: input.productSku,
+          providerSku: input.providerSku,
+          providerBranchId: input.providerBranchId,
+          stock: input.stock ?? 0,
+          reservedStock: input.reservedStock ?? 0,
+        }),
+      );
+      return this.toListItem(row);
+    } catch (e) {
+      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+        throw new ConflictException('inventory row already exists for product_sku and branch');
+      }
+      throw e;
+    }
   }
 
   async summaryBySku(sku: string): Promise<InventorySummary> {

@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { ExtractJwt, Strategy, StrategyOptions } from 'passport-jwt';
 import { passportJwtSecret } from 'jwks-rsa';
 import { AppConfig } from '../config/configuration';
 import { AuthenticatedUser, JwtPayload } from './jwt-payload.interface';
@@ -11,7 +11,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(config: ConfigService<AppConfig, true>) {
     const jwt = config.get('jwt', { infer: true });
 
-    const opts: ConstructorParameters<typeof Strategy>[0] =
+    // Anotar con StrategyOptions da contexto a los literales (algorithms →
+    // Algorithm[], no string[]). Sin passReqToCallback, ambas ramas son la
+    // variante "without request".
+    const opts: StrategyOptions =
       jwt.mode === 'jwks' && jwt.jwksUrl
         ? {
             secretOrKeyProvider: passportJwtSecret({
@@ -33,7 +36,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
             audience: jwt.audience,
           };
 
-    super(opts);
+    // super() está tipado como overload de tuplas; nuestro opts nunca setea
+    // passReqToCallback, así que es siempre la variante sin request.
+    super(opts as Extract<StrategyOptions, { passReqToCallback?: false }>);
   }
 
   validate(payload: JwtPayload): AuthenticatedUser {
