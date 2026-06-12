@@ -12,7 +12,7 @@ export class ShippingController {
   constructor(
     private readonly quoteService: ShippingQuoteService,
     private readonly shipmentService: ShipmentService,
-  ) {}
+  ) { }
 
   @Post('orders/:orderId/shipping/quotes')
   @Roles('shipping:write')

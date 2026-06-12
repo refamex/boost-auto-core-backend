@@ -13,8 +13,17 @@ export const validationSchema = Joi.object({
   DB_SSL: Joi.boolean().default(false),
 
   JWT_MODE: Joi.string().valid('mock', 'jwks', 'static').default('mock'),
-  JWT_JWKS_URL: Joi.string().uri().when('JWT_MODE', { is: 'jwks', then: Joi.required() }),
-  JWT_PUBLIC_KEY: Joi.string().when('JWT_MODE', { is: 'static', then: Joi.required() }),
+  // PaaS suelen inyectar "" aunque no se usen; en mock deben poder ir vacías.
+  JWT_JWKS_URL: Joi.when('JWT_MODE', {
+    is: 'jwks',
+    then: Joi.string().uri().required(),
+    otherwise: Joi.string().empty('').optional(),
+  }),
+  JWT_PUBLIC_KEY: Joi.when('JWT_MODE', {
+    is: 'static',
+    then: Joi.string().required(),
+    otherwise: Joi.string().empty('').optional(),
+  }),
   JWT_ISSUER: Joi.string().default('autoboost-auth'),
   JWT_AUDIENCE: Joi.string().default('autoboost-core'),
 

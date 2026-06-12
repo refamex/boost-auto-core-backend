@@ -20,7 +20,9 @@ export class PolarSdkClient implements PolarClient {
     });
   }
 
-  async createCheckout(input: CreatePolarCheckoutInput): Promise<PolarCheckoutResult> {
+  async createCheckout(
+    input: CreatePolarCheckoutInput,
+  ): Promise<PolarCheckoutResult> {
     const polarCfg = this.config.get('polar', { infer: true });
     const productId = polarCfg.productId!;
 
