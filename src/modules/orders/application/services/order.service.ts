@@ -5,8 +5,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOptionsWhere, In, Repository } from 'typeorm';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
+import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
 import {
   INVENTORY_REPOSITORY,
@@ -39,7 +43,27 @@ export class OrderService {
     private readonly reserveStock: ReserveStockUseCase,
     private readonly releaseStock: ReleaseStockUseCase,
     @Inject(INVENTORY_REPOSITORY) private readonly inventoryRepo: InventoryRepository,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /**
+   * Announces an order transition.
+   *
+   * Fire-and-forget on purpose: nothing in the order flow should fail because a
+   * notification could not be recorded. The listener does its own error
+   * handling and the outbox owns retries.
+   */
+  private emit(eventKey: NotificationEventKey, order: OrderEntity): void {
+    const payload: NotificationEmittedEvent = {
+      eventKey,
+      recipientUserId: order.customerId,
+      entityType: 'order',
+      entityId: order.id,
+      reference: order.orderNumber,
+      contact: { email: order.shipToEmail, phone: order.shipToPhone },
+    };
+    this.events.emit(eventKey, payload);
+  }
 
   list(query: OrderQueryDto): Promise<OrderEntity[]> {
     const where: FindOptionsWhere<OrderEntity> = {};
@@ -61,8 +85,13 @@ export class OrderService {
     return found;
   }
 
-  async create(dto: CreateOrderDto): Promise<OrderEntity> {
-    return this.dataSource.transaction(async (tx) => {
+  /**
+   * `actor` is the authenticated caller, used only to default the contact email
+   * from the JWT claim. It is optional so in-process callers (quote conversion)
+   * keep working; those orders simply carry whatever contact the DTO supplies.
+   */
+  async create(dto: CreateOrderDto, actor?: AuthenticatedUser): Promise<OrderEntity> {
+    const created = await this.dataSource.transaction(async (tx) => {
       const products = await this.loadProducts(dto.items.map((i) => i.productId));
       const { subtotal, taxTotal, items } = this.buildItems(dto, products);
 
@@ -73,6 +102,12 @@ export class OrderService {
           salesRepId: dto.salesRepId,
           providerBranchId: dto.providerBranchId,
           status: dto.status ?? 'draft',
+          // Contact is frozen onto the order because the notification triggers
+          // that matter most — the Polar and Skydropx webhooks — run with no
+          // user context at all. Without this there is nobody to write to.
+          shipToName: dto.shipToName,
+          shipToPhone: dto.shipToPhone,
+          shipToEmail: dto.shipToEmail ?? actor?.email,
           subtotal,
           taxTotal,
           grandTotal: subtotal + taxTotal,
@@ -97,6 +132,12 @@ export class OrderService {
 
       return full;
     });
+
+    // Emitted after the transaction commits: a listener must never observe an
+    // order that a rollback is about to erase.
+    this.emit('order.placed', created);
+    if (created.status === 'confirmed') this.emit('order.confirmed', created);
+    return created;
   }
 
   async update(id: string, dto: UpdateOrderDto): Promise<OrderEntity> {
@@ -114,7 +155,33 @@ export class OrderService {
     }
     await this.reserveForOrder(order);
     order.status = 'confirmed';
-    return this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+    this.emit('order.confirmed', saved);
+    return saved;
+  }
+
+  /**
+   * Marks the order as being picked and packed.
+   *
+   * This state did not exist: the gap between `confirmed` and a shipment being
+   * created was unmodelled, while the storefront was already deriving and
+   * showing "En preparación". Now it is a real transition somebody performs,
+   * and one the customer is told about.
+   */
+  async prepare(id: string): Promise<OrderEntity> {
+    const order = await this.findById(id);
+    if (order.status === 'cancelled') {
+      throw new ConflictException('cannot prepare a cancelled order');
+    }
+    if (order.status !== 'confirmed') {
+      throw new ConflictException(
+        `cannot prepare an order in status ${order.status}; confirm it first`,
+      );
+    }
+    order.status = 'preparing';
+    const saved = await this.orderRepo.save(order);
+    this.emit('order.preparing', saved);
+    return saved;
   }
 
   async cancel(id: string): Promise<OrderEntity> {
@@ -122,11 +189,15 @@ export class OrderService {
     if (order.status === 'cancelled') {
       throw new ConflictException('order is already cancelled');
     }
-    if (order.status === 'confirmed') {
+    // `preparing` holds the same reservation `confirmed` does, so it has to
+    // release it too — otherwise cancelling a packed order silently strands stock.
+    if (order.status === 'confirmed' || order.status === 'preparing') {
       await this.releaseForOrder(order);
     }
     order.status = 'cancelled';
-    return this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+    this.emit('order.cancelled', saved);
+    return saved;
   }
 
   async addPayment(orderId: string, dto: CreateOrderPaymentDto): Promise<OrderPaymentEntity> {

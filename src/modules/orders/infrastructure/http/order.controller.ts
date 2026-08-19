@@ -8,6 +8,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { CurrentUser } from '../../../../shared/common/decorators/current-user.decorator';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { OrderService } from '../../application/services/order.service';
 import {
@@ -35,8 +37,8 @@ export class OrderController {
 
   @Post()
   @Roles('orders:write')
-  create(@Body() dto: CreateOrderDto) {
-    return this.svc.create(dto);
+  create(@Body() dto: CreateOrderDto, @CurrentUser() user?: AuthenticatedUser) {
+    return this.svc.create(dto, user);
   }
 
   @Patch(':id')
@@ -49,6 +51,12 @@ export class OrderController {
   @Roles('orders:write')
   confirm(@Param('id') id: string) {
     return this.svc.confirm(id);
+  }
+
+  @Post(':id/prepare')
+  @Roles('orders:write')
+  prepare(@Param('id') id: string) {
+    return this.svc.prepare(id);
   }
 
   @Post(':id/cancel')

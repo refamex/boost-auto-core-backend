@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
+  IsEmail,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -58,6 +59,26 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   status?: string;
+
+  /**
+   * Contact for this order. Frozen at creation so webhooks and scheduled jobs —
+   * which run with no user context — still know who to notify. `shipToEmail`
+   * falls back to the caller's JWT `email` claim when omitted.
+   */
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  shipToName?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  shipToPhone?: string;
+
+  @ApiPropertyOptional()
+  @IsEmail()
+  @IsOptional()
+  shipToEmail?: string;
 
   @ApiProperty({ type: [CreateOrderItemDto] })
   @IsArray()
