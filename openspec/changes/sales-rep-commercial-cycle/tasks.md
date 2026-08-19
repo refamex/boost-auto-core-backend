@@ -64,17 +64,17 @@ strategy before starting, per `single-pr`.
 
 ## Phase 5: DB integration tests — Docker required
 
-- [ ] 5.1 RED: `test/customers-constraints.e2e-spec.ts` (`@testcontainers/postgresql`, `describeWithDocker`) — asserts both partial unique indexes reject violations, many NULL `auth_customer_id` prospects allowed, concurrent promote leaves exactly one main, `ON DELETE CASCADE`, `updated_at` trigger fires, migration `up→down→up` clean. Run against the Phase-1.3 migration (no unique indexes yet) so it fails for the real reason, not a Docker skip.
-- [ ] 5.2 GREEN: add `uq_customer_profile_auth_customer_id` and `uq_customer_branch_main` (`CREATE UNIQUE INDEX ... WHERE ...`) to the 1.3 migration file; re-run 5.1.
-- [ ] 5.3 Run the full 5.1 suite with Docker actually running; record the exact pass/fail. A `describeWithDocker`-skipped run does not count as passing.
+- [x] 5.1 RED: `test/customers-constraints.e2e-spec.ts` (`@testcontainers/postgresql`, `describeWithDocker`) — asserts both partial unique indexes reject violations, many NULL `auth_customer_id` prospects allowed, concurrent promote leaves exactly one main, `ON DELETE CASCADE`, `updated_at` trigger fires, migration `up→down→up` clean. Ran against the Phase-1.3 migration (no unique indexes yet): 3/7 failed for the real reason (missing indexes — `Received promise resolved instead of rejected` / `Expected: 1, Received: 2`), the other 4 (NULL prospects, cascade, trigger, migration cycle) already passed since Phase 1 implements them.
+- [x] 5.2 GREEN: added `uq_customer_profile_auth_customer_id` and `uq_customer_branch_main` (`CREATE UNIQUE INDEX ... WHERE ...`) to the 1.3 migration file, plus matching `DROP INDEX IF EXISTS` in `down()`; re-ran 5.1 → 7/7 passed.
+- [x] 5.3 Ran the full 5.1 suite 4 times total with Docker actually running (1 initial + 3 stability re-runs to rule out flakiness in the forced-race test): 7/7 passed every time, ~18–24s per run.
 
 ## Phase 6: API E2E tests
 
-- [ ] 6.1 RED: `test/customers.e2e-spec.ts` (supertest + mock auth `X-User-Id`/`X-Roles`) — rep sees only own portfolio (no `salesRepId` query param); foreign `GET :id` → 404; `ownerSalesRepId` in create body → 400; non-admin reassignment attempt rejected; admin reassigns successfully.
-- [ ] 6.2 GREEN: confirm 6.1 passes against the fully wired stack (Phase 4).
+- [x] 6.1 RED: `test/customers.e2e-spec.ts` (supertest + mock auth `X-User-Id`/`X-Roles`/`X-Sales-Rep-Id`) — rep sees only own portfolio (no `salesRepId` query param); foreign `GET :id` → 404; `ownerSalesRepId` in create body → 400; non-admin reassignment attempt rejected; admin reassigns successfully. First run: 4/5 passed, 1 failed for a real reason (reassign-ownership test 400'd because `class-validator`'s `@IsUUID()` defaults to version `'all'`, which requires an RFC4122 variant nibble the test's placeholder UUIDs lacked — fixed the test fixtures, not production code).
+- [x] 6.2 GREEN: confirmed 6.1 passes against the fully wired stack (Phase 4) — 5/5 passed after the fixture fix.
 
 ## Phase 7: Final verification
 
-- [ ] 7.1 `pnpm migration:run` → `pnpm migration:revert` → `pnpm migration:run` clean on a throwaway DB.
-- [ ] 7.2 `pnpm test`, `pnpm test:e2e` (Docker running), `pnpm lint`, `pnpm build` all pass; record results.
-- [ ] 7.3 Confirm zero diff in `src/modules/orders/**`, `sales`, `billing`, `notifications` (`git diff --stat origin/main`).
+- [x] 7.1 `pnpm migration:run` → `pnpm migration:revert` → `pnpm migration:run` clean on a throwaway, ephemeral `docker run --rm` container DB (port 55433, dropped afterward) — never against the deployed Railway DB. All 6 migrations ran; only `AddCustomersSchema1779738126227` reverted/re-ran on the revert step (targeted correctly); clean throughout.
+- [x] 7.2 `pnpm test` → 198/198 (20 suites). `pnpm test:e2e` (Docker running) → 3/4 suites green (20/20 of our tests), 1 pre-existing unrelated failure in `test/app.e2e-spec.ts` (byte-identical to `origin/main`, zero diff — fails because this worktree has no committed `.env` and that file boots the full `AppModule` without a DB override, unlike our two new specs which set `DB_*` env vars before importing `AppModule`; not introduced by this change). Scoped `npx eslint` on the 3 touched files → 0 errors. `pnpm build` → clean.
+- [x] 7.3 Confirmed zero diff in `src/modules/orders/**`, `sales`, `billing`, `notifications` via `git diff --stat origin/main` — empty output.
