@@ -6,7 +6,7 @@ import {
 } from '../../../inventory/application/ports/inventory.repository';
 import { ImportJobService } from '../../../integrations/application/services/import-job.service';
 import { STOCK_FEED_CLIENT } from '../ports/stock-feed.client';
-import { SYNC_LOCK } from '../ports/sync-lock';
+import { SYNC_LOCK } from '../../../../shared/database/sync-lock';
 import {
   ROUGH_COUNTRY_JOB_TYPE,
   ROUGH_COUNTRY_SOURCE_SYSTEM,

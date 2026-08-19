@@ -46,6 +46,11 @@ export interface RoughCountryConfig {
   timeZone: string;
 }
 
+export interface NotificationsConfig {
+  /** Off by default: core has no mail credential of its own yet. */
+  emailEnabled: boolean;
+}
+
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
   port: number;
@@ -68,6 +73,7 @@ export interface AppConfig {
   polar: PolarConfig;
   skydropx: SkydropxConfig;
   roughCountry: RoughCountryConfig;
+  notifications: NotificationsConfig;
 }
 
 const optionalInt = (raw?: string): number | undefined => {
@@ -134,5 +140,8 @@ export default (): AppConfig => ({
     branchNvId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_NV_ID),
     branchTnId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_TN_ID),
     timeZone: process.env.ROUGH_COUNTRY_SYNC_TZ ?? 'America/Mexico_City',
+  },
+  notifications: {
+    emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',
   },
 });

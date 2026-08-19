@@ -6,9 +6,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { AppConfig } from '../../../../shared/config/configuration';
+import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
+import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { ShipmentTrackingEventEntity } from '../../domain/entities/shipment-tracking-event.entity';
 import { ShipmentEntity } from '../../domain/entities/shipment.entity';
@@ -27,7 +30,33 @@ export class ShipmentService {
     private readonly trackingRepo: Repository<ShipmentTrackingEventEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
+    private readonly events: EventEmitter2,
   ) {}
+
+  /**
+   * Announces an order transition to whoever is listening.
+   *
+   * Notifications live outside this module and are not imported here — the
+   * dependency runs one way, through the emitter. Contact comes off the order
+   * because this handler has no user context at all: the webhook is public.
+   */
+  private emitOrderEvent(
+    eventKey: NotificationEventKey,
+    order: OrderEntity,
+    extra: { trackingNumber?: string | null; carrierName?: string | null } = {},
+  ): void {
+    const payload: NotificationEmittedEvent = {
+      eventKey,
+      recipientUserId: order.customerId,
+      entityType: 'order',
+      entityId: order.id,
+      reference: order.orderNumber,
+      contact: { email: order.shipToEmail, phone: order.shipToPhone },
+      ...extra,
+    };
+    this.events.emit(eventKey, payload);
+  }
+
 
   private assertEnabled(): void {
     if (!this.config.get('skydropx.enabled', { infer: true })) {
@@ -77,6 +106,12 @@ export class ShipmentService {
 
     order.shippingStatus = 'shipment_created';
     await this.orderRepo.save(order);
+
+    // The one moment a tracking number first exists, so the copy can carry it.
+    this.emitOrderEvent('shipment.created', order, {
+      trackingNumber: shipment.trackingNumber,
+      carrierName: shipment.carrierName,
+    });
 
     return shipment;
   }

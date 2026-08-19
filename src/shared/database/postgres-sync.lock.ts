@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, QueryRunner } from 'typeorm';
-import { SyncLock } from '../../application/ports/sync-lock';
+import { SyncLock } from './sync-lock';
 
 /**
  * Session-scoped Postgres advisory lock.
