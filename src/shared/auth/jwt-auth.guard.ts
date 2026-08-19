@@ -47,7 +47,13 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
         ? rolesHeader.split(',').map((r) => r.trim()).filter(Boolean)
         : [];
 
-    req.user = { id: userId, roles };
+    // Mirrors the sales_rep_id claim that jwks mode maps in jwt.strategy.ts.
+    // Without it the rep tier is unreachable locally, and granting yourself
+    // quotes:admin to work around that bypasses the very filter under test.
+    const salesRepHeader = req.headers['x-sales-rep-id'];
+    const salesRepId = typeof salesRepHeader === 'string' ? salesRepHeader.trim() : undefined;
+
+    req.user = { id: userId, roles, salesRepId: salesRepId || undefined };
     return true;
   }
 }
