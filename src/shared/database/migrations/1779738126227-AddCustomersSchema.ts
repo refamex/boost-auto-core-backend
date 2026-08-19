@@ -13,11 +13,6 @@ export class AddCustomersSchema1779738126227 implements MigrationInterface {
     // `auth_customer_id` es nullable: un rep puede registrar un prospecto antes
     // de que exista una identidad en autoboost-backend-auth, y vincularla
     // después (ver customer-link.ts). No hay FK cruzando servicios.
-    //
-    // Deliberadamente SIN los dos índices únicos parciales todavía
-    // (uq_customer_profile_auth_customer_id, uq_customer_branch_main): la
-    // fase 5 de tasks.md los agrega para que la prueba de integración los vea
-    // fallar por la razón correcta antes de existir, no por un skip de Docker.
     await queryRunner.query(`
       CREATE TABLE customers.customer_profile (
         id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,6 +66,23 @@ export class AddCustomersSchema1779738126227 implements MigrationInterface {
       `CREATE INDEX idx_customer_branch_profile_id ON customers.customer_branch(customer_profile_id)`,
     );
 
+    // Postgres no tiene constraint único parcial; solo índice único parcial.
+    // Dos perfiles no pueden compartir el mismo auth_customer_id no-nulo
+    // (los prospectos con NULL quedan fuera del índice, así que pueden
+    // repetirse sin límite). A lo sumo una branch main por customer_profile;
+    // el árbitro final bajo concurrencia (ver customer-branch.service.ts /
+    // design D4) — la democión transaccional por sí sola no basta.
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX uq_customer_profile_auth_customer_id
+        ON customers.customer_profile(auth_customer_id)
+        WHERE auth_customer_id IS NOT NULL
+    `);
+    await queryRunner.query(`
+      CREATE UNIQUE INDEX uq_customer_branch_main
+        ON customers.customer_branch(customer_profile_id)
+        WHERE is_main_branch
+    `);
+
     await queryRunner.query(
       `CREATE TRIGGER trg_customer_profile_updated_at BEFORE UPDATE ON customers.customer_profile FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
     );
@@ -85,6 +97,12 @@ export class AddCustomersSchema1779738126227 implements MigrationInterface {
     );
     await queryRunner.query(
       `DROP TRIGGER IF EXISTS trg_customer_profile_updated_at ON customers.customer_profile`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS customers.uq_customer_branch_main`,
+    );
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS customers.uq_customer_profile_auth_customer_id`,
     );
     await queryRunner.query(`DROP TABLE IF EXISTS customers.customer_branch`);
     await queryRunner.query(`DROP TABLE IF EXISTS customers.customer_profile`);
