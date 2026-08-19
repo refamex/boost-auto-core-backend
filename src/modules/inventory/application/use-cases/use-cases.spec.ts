@@ -4,7 +4,10 @@ import {
   InventoryRepository,
 } from '../ports/inventory.repository';
 import { Inventory } from '../../domain/inventory.aggregate';
-import { InsufficientStockError, InventoryNotFoundError } from '../../domain/errors';
+import {
+  InsufficientStockError,
+  InventoryNotFoundError,
+} from '../../domain/errors';
 import { ReserveStockUseCase } from './reserve-stock.use-case';
 import { ReleaseStockUseCase } from './release-stock.use-case';
 import { AdjustStockUseCase } from './adjust-stock.use-case';
@@ -19,7 +22,10 @@ const makeAggregate = (stock = 10, reserved = 0) =>
     reservedStock: reserved,
   });
 
-const buildMockRepo = (initialStock: number, initialReserved: number): InventoryRepository => {
+const buildMockRepo = (
+  initialStock: number,
+  initialReserved: number,
+): InventoryRepository => {
   let aggregate = makeAggregate(initialStock, initialReserved);
   return {
     list: jest.fn(),
@@ -27,6 +33,9 @@ const buildMockRepo = (initialStock: number, initialReserved: number): Inventory
     findBySkuAndBranch: jest.fn(),
     create: jest.fn(),
     summaryBySku: jest.fn(),
+    findExistingProductSkus: jest.fn(),
+    bulkUpsertStock: jest.fn(),
+    zeroOutMissing: jest.fn(),
     mutate: jest.fn(async (id: number, fn) => {
       if (id !== 42) throw new InventoryNotFoundError(id);
       const result = fn(aggregate);
@@ -42,7 +51,10 @@ describe('Inventory use cases', () => {
     it('reserves through the aggregate', async () => {
       const repo = buildMockRepo(10, 0);
       const moduleRef = await Test.createTestingModule({
-        providers: [ReserveStockUseCase, { provide: INVENTORY_REPOSITORY, useValue: repo }],
+        providers: [
+          ReserveStockUseCase,
+          { provide: INVENTORY_REPOSITORY, useValue: repo },
+        ],
       }).compile();
 
       const uc = moduleRef.get(ReserveStockUseCase);
@@ -54,7 +66,10 @@ describe('Inventory use cases', () => {
     it('propagates InsufficientStockError', async () => {
       const repo = buildMockRepo(10, 8);
       const moduleRef = await Test.createTestingModule({
-        providers: [ReserveStockUseCase, { provide: INVENTORY_REPOSITORY, useValue: repo }],
+        providers: [
+          ReserveStockUseCase,
+          { provide: INVENTORY_REPOSITORY, useValue: repo },
+        ],
       }).compile();
 
       const uc = moduleRef.get(ReserveStockUseCase);
@@ -64,7 +79,10 @@ describe('Inventory use cases', () => {
     it('propagates InventoryNotFoundError', async () => {
       const repo = buildMockRepo(10, 0);
       const moduleRef = await Test.createTestingModule({
-        providers: [ReserveStockUseCase, { provide: INVENTORY_REPOSITORY, useValue: repo }],
+        providers: [
+          ReserveStockUseCase,
+          { provide: INVENTORY_REPOSITORY, useValue: repo },
+        ],
       }).compile();
 
       const uc = moduleRef.get(ReserveStockUseCase);
@@ -76,7 +94,10 @@ describe('Inventory use cases', () => {
     it('releases reserved', async () => {
       const repo = buildMockRepo(10, 5);
       const moduleRef = await Test.createTestingModule({
-        providers: [ReleaseStockUseCase, { provide: INVENTORY_REPOSITORY, useValue: repo }],
+        providers: [
+          ReleaseStockUseCase,
+          { provide: INVENTORY_REPOSITORY, useValue: repo },
+        ],
       }).compile();
 
       const uc = moduleRef.get(ReleaseStockUseCase);
@@ -89,7 +110,10 @@ describe('Inventory use cases', () => {
     it('applies delta and logs reason', async () => {
       const repo = buildMockRepo(10, 0);
       const moduleRef = await Test.createTestingModule({
-        providers: [AdjustStockUseCase, { provide: INVENTORY_REPOSITORY, useValue: repo }],
+        providers: [
+          AdjustStockUseCase,
+          { provide: INVENTORY_REPOSITORY, useValue: repo },
+        ],
       }).compile();
 
       const uc = moduleRef.get(AdjustStockUseCase);

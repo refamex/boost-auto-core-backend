@@ -39,6 +39,10 @@ export class CreateImportJobDto {
   @IsString()
   @IsNotEmpty()
   status!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  startedAt?: Date;
 }
 
 export class UpdateImportJobDto {
