@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -69,11 +70,14 @@ describe('PolarWebhookService', () => {
 
   let service: PolarWebhookService;
 
+  const events = { emit: jest.fn() };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
       providers: [
         PolarWebhookService,
+        { provide: EventEmitter2, useValue: events },
         { provide: DataSource, useValue: dataSource },
         { provide: getRepositoryToken(WebhookEventEntity), useValue: webhookRepo },
         { provide: getRepositoryToken(PolarCheckoutEntity), useValue: checkoutRepo },

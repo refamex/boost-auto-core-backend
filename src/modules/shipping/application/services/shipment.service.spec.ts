@@ -1,5 +1,6 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
@@ -41,12 +42,15 @@ describe('ShipmentService', () => {
 
   let service: ShipmentService;
 
+  const events = { emit: jest.fn() };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     config.get.mockReturnValue(true);
     const moduleRef = await Test.createTestingModule({
       providers: [
         ShipmentService,
+        { provide: EventEmitter2, useValue: events },
         { provide: ConfigService, useValue: config },
         { provide: SKYDROPX_CLIENT, useValue: skydropx },
         { provide: getRepositoryToken(ShipmentEntity), useValue: shipmentRepo },

@@ -1,3 +1,4 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
@@ -34,11 +35,14 @@ describe('ShippingWebhookService', () => {
     data: { shipment_id: 'sky-1', status: 'delivered', occurred_at: '2026-05-25T10:00:00Z' },
   };
 
+  const events = { emit: jest.fn() };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     const moduleRef = await Test.createTestingModule({
       providers: [
         ShippingWebhookService,
+        { provide: EventEmitter2, useValue: events },
         { provide: getRepositoryToken(ShippingWebhookEventEntity), useValue: webhookRepo },
         { provide: getRepositoryToken(ShipmentEntity), useValue: shipmentRepo },
         { provide: getRepositoryToken(ShipmentTrackingEventEntity), useValue: trackingRepo },
