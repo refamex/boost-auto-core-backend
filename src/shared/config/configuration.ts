@@ -35,6 +35,17 @@ export interface SkydropxConfig {
   origin: SkydropxOriginAddress;
 }
 
+export interface RoughCountryConfig {
+  enabled: boolean;
+  feedUrl: string;
+  /** suppliers.provider_branch id of the Sparks, NV distribution center. */
+  branchNvId?: number;
+  /** suppliers.provider_branch id of the Dyersburg, TN headquarters. */
+  branchTnId?: number;
+  /** IANA zone the cron schedule is expressed in. */
+  timeZone: string;
+}
+
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
   port: number;
@@ -56,7 +67,14 @@ export interface AppConfig {
   };
   polar: PolarConfig;
   skydropx: SkydropxConfig;
+  roughCountry: RoughCountryConfig;
 }
+
+const optionalInt = (raw?: string): number | undefined => {
+  if (raw === undefined || raw.trim() === '') return undefined;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isNaN(parsed) ? undefined : parsed;
+};
 
 export default (): AppConfig => ({
   env: (process.env.NODE_ENV as AppConfig['env']) ?? 'development',
@@ -81,7 +99,8 @@ export default (): AppConfig => ({
     enabled: process.env.POLAR_ENABLED === 'true',
     accessToken: process.env.POLAR_ACCESS_TOKEN,
     webhookSecret: process.env.POLAR_WEBHOOK_SECRET,
-    server: (process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox') as PolarServer,
+    server:
+      process.env.POLAR_SERVER === 'production' ? 'production' : 'sandbox',
     productId: process.env.POLAR_PRODUCT_ID,
     successUrl: process.env.POLAR_SUCCESS_URL,
     cancelUrl: process.env.POLAR_CANCEL_URL,
@@ -91,9 +110,8 @@ export default (): AppConfig => ({
     enabled: process.env.SKYDROPX_ENABLED === 'true',
     clientId: process.env.SKYDROPX_CLIENT_ID,
     clientSecret: process.env.SKYDROPX_CLIENT_SECRET,
-    server: (process.env.SKYDROPX_SERVER === 'production'
-      ? 'production'
-      : 'sandbox') as SkydropxServer,
+    server:
+      process.env.SKYDROPX_SERVER === 'production' ? 'production' : 'sandbox',
     webhookSecret: process.env.SKYDROPX_WEBHOOK_SECRET,
     origin: {
       name: process.env.SKYDROPX_ORIGIN_NAME,
@@ -107,5 +125,14 @@ export default (): AppConfig => ({
       phone: process.env.SKYDROPX_ORIGIN_PHONE,
       email: process.env.SKYDROPX_ORIGIN_EMAIL,
     },
+  },
+  roughCountry: {
+    enabled: process.env.ROUGH_COUNTRY_SYNC_ENABLED === 'true',
+    feedUrl:
+      process.env.ROUGH_COUNTRY_FEED_URL ??
+      'https://feeds.roughcountry.com/jobber_pc3.xlsx',
+    branchNvId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_NV_ID),
+    branchTnId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_TN_ID),
+    timeZone: process.env.ROUGH_COUNTRY_SYNC_TZ ?? 'America/Mexico_City',
   },
 });
