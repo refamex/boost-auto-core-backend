@@ -8,7 +8,7 @@ import {
 import { ImportJobService } from '../../../integrations/application/services/import-job.service';
 import { AppConfig } from '../../../../shared/config/configuration';
 import { STOCK_FEED_CLIENT, StockFeedClient } from '../ports/stock-feed.client';
-import { SYNC_LOCK, SyncLock } from '../ports/sync-lock';
+import { SYNC_LOCK, SyncLock } from '../../../../shared/database/sync-lock';
 
 export const ROUGH_COUNTRY_JOB_TYPE = 'rough-country-stock';
 export const ROUGH_COUNTRY_SOURCE_SYSTEM = 'roughcountry-jobber-pc3';
