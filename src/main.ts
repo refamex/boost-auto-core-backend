@@ -9,10 +9,16 @@ import { DomainExceptionFilter } from './shared/common/filters/domain-exception.
 import { LoggingInterceptor } from './shared/common/interceptors/logging.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false, rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: false,
+    rawBody: true,
+  });
 
   app.use(helmet());
   app.enableCors();
+  // Lets the scheduler (and TypeORM pool) tear down on SIGTERM instead of the
+  // process being killed mid-import.
+  app.enableShutdownHooks();
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
   app.useGlobalPipes(
@@ -28,7 +34,9 @@ async function bootstrap() {
 
   const swagger = new DocumentBuilder()
     .setTitle('AutoBoost Core API')
-    .setDescription('PIM + Suppliers + Inventory + Vehicles + Compatibility + Commerce + Orders + Sales + Billing + Integrations + Payments (Polar)')
+    .setDescription(
+      'PIM + Suppliers + Inventory + Vehicles + Compatibility + Commerce + Orders + Sales + Billing + Integrations + Payments (Polar)',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -36,8 +44,10 @@ async function bootstrap() {
 
   const port = parseInt(process.env.PORT ?? '3000', 10);
   await app.listen(port);
-  // eslint-disable-next-line no-console
-  console.log(`✓ autoboost-core listening on http://localhost:${port} — docs at /docs`);
+
+  console.log(
+    `✓ autoboost-core listening on http://localhost:${port} — docs at /docs`,
+  );
 }
 
 void bootstrap();

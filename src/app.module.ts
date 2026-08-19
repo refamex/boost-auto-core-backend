@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration, { AppConfig } from './shared/config/configuration';
 import { validationSchema } from './shared/config/validation.schema';
@@ -18,6 +19,7 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
+import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
 
 @Module({
   imports: [
@@ -42,10 +44,14 @@ import { ShippingModule } from './modules/shipping/shipping.module';
           autoLoadEntities: true,
           synchronize: false,
           migrationsRun: false,
-          logging: config.get('env', { infer: true }) === 'development' ? ['error', 'warn'] : ['error'],
+          logging:
+            config.get('env', { infer: true }) === 'development'
+              ? ['error', 'warn']
+              : ['error'],
         };
       },
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     HealthModule,
     PimModule,
@@ -61,6 +67,7 @@ import { ShippingModule } from './modules/shipping/shipping.module';
     PaymentsModule,
     ShippingModule,
     QuotesModule,
+    StockSyncModule,
   ],
 })
 export class AppModule {}
