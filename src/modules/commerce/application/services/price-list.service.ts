@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PriceListEntity } from '../../domain/entities/price-list.entity';
@@ -19,6 +24,29 @@ export class PriceListService {
     const found = await this.repo.findOne({ where: { id } });
     if (!found) throw new NotFoundException(`PriceList ${id} not found`);
     return found;
+  }
+
+  /**
+   * The price list that applies to a document: the one named by `code`, or the
+   * default list when no code is given.
+   *
+   * Resolved once per quote rather than per line so a misconfigured catalogue
+   * reports itself plainly instead of surfacing as an unpriceable product.
+   */
+  async findApplicable(code?: string): Promise<PriceListEntity> {
+    if (code) {
+      const byCode = await this.repo.findOne({ where: { code } });
+      if (!byCode) throw new NotFoundException(`PriceList ${code} not found`);
+      return byCode;
+    }
+
+    const fallback = await this.repo.findOne({ where: { isDefault: true } });
+    if (!fallback) {
+      throw new BadRequestException(
+        'no default price list configured; send priceListCode explicitly',
+      );
+    }
+    return fallback;
   }
 
   async create(dto: CreatePriceListDto): Promise<PriceListEntity> {

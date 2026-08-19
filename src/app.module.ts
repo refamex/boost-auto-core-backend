@@ -17,6 +17,7 @@ import { SalesModule } from './modules/sales/sales.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
 
@@ -65,6 +66,7 @@ import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
     IntegrationsModule,
     PaymentsModule,
     ShippingModule,
+    QuotesModule,
     StockSyncModule,
   ],
 })

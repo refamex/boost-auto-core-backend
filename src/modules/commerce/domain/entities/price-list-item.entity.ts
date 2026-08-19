@@ -13,7 +13,7 @@ import { ProductEntity } from '../../../pim/domain/entities/product.entity';
 import { PriceListEntity } from './price-list.entity';
 
 @Entity({ schema: 'commerce', name: 'price_list_items' })
-@Unique(['priceListId', 'productId', 'validFrom'])
+@Unique(['priceListId', 'productId', 'minQty', 'validFrom'])
 export class PriceListItemEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;

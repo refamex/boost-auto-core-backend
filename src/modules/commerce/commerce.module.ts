@@ -15,6 +15,6 @@ import { PriceListController } from './infrastructure/http/price-list.controller
   ],
   providers: [PriceListService, PriceListItemService, PaymentMethodService],
   controllers: [PriceListController, PaymentMethodController],
-  exports: [PriceListService, PaymentMethodService],
+  exports: [PriceListService, PriceListItemService, PaymentMethodService],
 })
 export class CommerceModule {}
