@@ -22,6 +22,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { QuotesModule } from './modules/quotes/quotes.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -74,6 +75,7 @@ import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
     QuotesModule,
     NotificationsModule,
     StockSyncModule,
+    CustomersModule,
   ],
 })
 export class AppModule {}
