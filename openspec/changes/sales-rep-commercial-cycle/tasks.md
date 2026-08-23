@@ -35,46 +35,46 @@ strategy before starting, per `single-pr`.
 
 ## Phase 1: Foundation
 
-- [x] 1.1 Create a fresh worktree/branch off `origin/main@3de05df` (e.g. `../autoboost-backend-core-worktrees/sales-rep-commercial-cycle`, branch `feat/sales-rep-commercial-cycle`). Never build on the local tree — it lacks `quotes`/`notifications` and stops at migration `...224`. **Done as** `../autoboost-backend-core-worktrees/customers`, branch `feature/customers-registry`.
-- [x] 1.2 Re-verify with `git ls-tree -r --name-only origin/main -- src/shared/database/migrations` that the max timestamp is `1779738126226`; confirm `1779738126227` is free. Confirmed: max is `1779738126226-AddNotificationsSchema.ts`.
-- [x] 1.3 Write `src/shared/database/migrations/1779738126227-AddCustomersSchema.ts`: `CREATE SCHEMA customers`, `customer_profile` + `customer_branch` tables, FK `customer_branch.customer_profile_id → customer_profile(id) ON DELETE CASCADE`, `idx_customer_profile_owner_sales_rep_id`, `idx_customer_branch_profile_id`, 2 `utils.set_updated_at` triggers, `up()`/`down()` shaped like `AddShippingSchema1779738126224`. **Do NOT add the two partial unique indexes yet** — Phase 5 proves them RED first per strict TDD.
-- [x] 1.4 Create `src/modules/customers/domain/entities/customer-profile.entity.ts` and `customer-branch.entity.ts` per design D5 (`@Entity({schema:'customers', name:...})`, UUID PK, no FK on `authCustomerId`/`ownerSalesRepId`).
+- [ ] 1.1 Create a fresh worktree/branch off `origin/main@3de05df` (e.g. `../autoboost-backend-core-worktrees/sales-rep-commercial-cycle`, branch `feat/sales-rep-commercial-cycle`). Never build on the local tree — it lacks `quotes`/`notifications` and stops at migration `...224`.
+- [ ] 1.2 Re-verify with `git ls-tree -r --name-only origin/main -- src/shared/database/migrations` that the max timestamp is `1779738126226`; confirm `1779738126227` is free.
+- [ ] 1.3 Write `src/shared/database/migrations/1779738126227-AddCustomersSchema.ts`: `CREATE SCHEMA customers`, `customer_profile` + `customer_branch` tables, FK `customer_branch.customer_profile_id → customer_profile(id) ON DELETE CASCADE`, `idx_customer_profile_owner_sales_rep_id`, `idx_customer_branch_profile_id`, 2 `utils.set_updated_at` triggers, `up()`/`down()` shaped like `AddShippingSchema1779738126224`. **Do NOT add the two partial unique indexes yet** — Phase 5 proves them RED first per strict TDD.
+- [ ] 1.4 Create `src/modules/customers/domain/entities/customer-profile.entity.ts` and `customer-branch.entity.ts` per design D5 (`@Entity({schema:'customers', name:...})`, UUID PK, no FK on `authCustomerId`/`ownerSalesRepId`).
 
 ## Phase 2: Domain rules (TDD — pure modules, zero mocks)
 
-- [x] 2.1 RED: `src/modules/customers/domain/customer-visibility.spec.ts` — admin (`{}`, incl. unowned), rep (`{ownerSalesRepId}`), customer tier absent (out of scope this change), no-match filter → `null` → empty page (per `customer-visibility` spec scenarios).
-- [x] 2.2 GREEN: `customer-visibility.ts` implementing `buildWhere(user, query)`. Also adds `isVisibleToUser(profile, user)`, an exported single-row visibility check reused by `CustomerBranchService` so the admin/rep tiers never drift between the two (D2 rationale, extended within the module).
-- [x] 2.3 RED: `customer-link.spec.ts` — allows `NULL → value`, rejects re-link to a different value.
-- [x] 2.4 GREEN: `customer-link.ts` link-once guard.
+- [ ] 2.1 RED: `src/modules/customers/domain/customer-visibility.spec.ts` — admin (`{}`, incl. unowned), rep (`{ownerSalesRepId}`), customer tier absent (out of scope this change), no-match filter → `null` → empty page (per `customer-visibility` spec scenarios).
+- [ ] 2.2 GREEN: `customer-visibility.ts` implementing `buildWhere(user, query)`.
+- [ ] 2.3 RED: `customer-link.spec.ts` — allows `NULL → value`, rejects re-link to a different value.
+- [ ] 2.4 GREEN: `customer-link.ts` link-once guard.
 
 ## Phase 3: Application services (TDD — mocked `Repository`/`DataSource`)
 
-- [x] 3.1 RED: `customer-profile.service.spec.ts` — create stamps `user.salesRepId`; body `ownerSalesRepId` never read; admin house account (`owner = NULL`); non-admin without `salesRepId` → 422; update/deactivate leaves branches untouched; scoped miss → 404 (never 403); link CAS `affected !== 1` → 409; `23505` on `uq_customer_profile_auth_customer_id` → 409.
-- [x] 3.2 GREEN: `customer-profile.service.ts`, incl. `findByAuthCustomerId(authCustomerId)`.
-- [x] 3.3 RED: `customer-branch.service.spec.ts` — `demoteOtherMainBranches` called with correct args before promote; `23505` on `uq_customer_branch_main` → `ConflictException`; delete-main blocked (sole branch and non-sole); delete non-main succeeds; scoped miss → 404.
-- [x] 3.4 GREEN: `customer-branch.service.ts` with transactional demote-then-promote.
+- [ ] 3.1 RED: `customer-profile.service.spec.ts` — create stamps `user.salesRepId`; body `ownerSalesRepId` never read; admin house account (`owner = NULL`); non-admin without `salesRepId` → 422; update/deactivate leaves branches untouched; scoped miss → 404 (never 403); link CAS `affected !== 1` → 409; `23505` on `uq_customer_profile_auth_customer_id` → 409.
+- [ ] 3.2 GREEN: `customer-profile.service.ts`, incl. `findByAuthCustomerId(authCustomerId)`.
+- [ ] 3.3 RED: `customer-branch.service.spec.ts` — `demoteOtherMainBranches` called with correct args before promote; `23505` on `uq_customer_branch_main` → `ConflictException`; delete-main blocked (sole branch and non-sole); delete non-main succeeds; scoped miss → 404.
+- [ ] 3.4 GREEN: `customer-branch.service.ts` with transactional demote-then-promote.
 
 ## Phase 4: HTTP + wiring
 
-- [x] 4.1 `src/modules/customers/infrastructure/http/dto/customer.dto.ts` — Create/Update/Query/Link/ReassignOwner DTOs; `ownerSalesRepId` absent from `CreateCustomerDto` (D7) so the global `ValidationPipe` 400s it. Also includes `CreateCustomerBranchDto`/`UpdateCustomerBranchDto` (design's single-file grouping).
-- [x] 4.2 `customer.controller.ts` — `@Roles`/`@CurrentUser`; action routes (`:id/link`, `:id/owner`) declared before `:id`; branch routes under `/v1/customers/:customerId/branches` with a `loadOwnedProfile` check.
-- [x] 4.3 `customers.module.ts` — `TypeOrmModule.forFeature([CustomerProfileEntity, CustomerBranchEntity])`; export `CustomerProfileService`, `CustomerBranchService` only (no entities/repo exported).
-- [x] 4.4 Register `CustomersModule` in `src/app.module.ts`.
-- [x] 4.5 Document the `customers` schema in `db.md`. **Deviation**: `db.md` did not exist anywhere in the repo (verified — no `db.md` in the worktree, none in `README.md` either); created new at repo root, documenting only the `customers` schema per this change's scope.
+- [ ] 4.1 `src/modules/customers/infrastructure/http/dto/customer.dto.ts` — Create/Update/Query/Link/ReassignOwner DTOs; `ownerSalesRepId` absent from `CreateCustomerDto` (D7) so the global `ValidationPipe` 400s it.
+- [ ] 4.2 `customer.controller.ts` — `@Roles`/`@CurrentUser`; action routes (`:id/link`, `:id/owner`) declared before `:id`; branch routes under `/v1/customers/:customerId/branches` with a `loadOwnedProfile` check.
+- [ ] 4.3 `customers.module.ts` — `TypeOrmModule.forFeature([CustomerProfileEntity, CustomerBranchEntity])`; export `CustomerProfileService`, `CustomerBranchService` only (no entities/repo exported).
+- [ ] 4.4 Register `CustomersModule` in `src/app.module.ts`.
+- [ ] 4.5 Document the `customers` schema in `db.md`.
 
 ## Phase 5: DB integration tests — Docker required
 
-- [x] 5.1 RED: `test/customers-constraints.e2e-spec.ts` (`@testcontainers/postgresql`, `describeWithDocker`) — asserts both partial unique indexes reject violations, many NULL `auth_customer_id` prospects allowed, concurrent promote leaves exactly one main, `ON DELETE CASCADE`, `updated_at` trigger fires, migration `up→down→up` clean. Ran against the Phase-1.3 migration (no unique indexes yet): 3/7 failed for the real reason (missing indexes — `Received promise resolved instead of rejected` / `Expected: 1, Received: 2`), the other 4 (NULL prospects, cascade, trigger, migration cycle) already passed since Phase 1 implements them.
-- [x] 5.2 GREEN: added `uq_customer_profile_auth_customer_id` and `uq_customer_branch_main` (`CREATE UNIQUE INDEX ... WHERE ...`) to the 1.3 migration file, plus matching `DROP INDEX IF EXISTS` in `down()`; re-ran 5.1 → 7/7 passed.
-- [x] 5.3 Ran the full 5.1 suite 4 times total with Docker actually running (1 initial + 3 stability re-runs to rule out flakiness in the forced-race test): 7/7 passed every time, ~18–24s per run.
+- [ ] 5.1 RED: `test/customers-constraints.e2e-spec.ts` (`@testcontainers/postgresql`, `describeWithDocker`) — asserts both partial unique indexes reject violations, many NULL `auth_customer_id` prospects allowed, concurrent promote leaves exactly one main, `ON DELETE CASCADE`, `updated_at` trigger fires, migration `up→down→up` clean. Run against the Phase-1.3 migration (no unique indexes yet) so it fails for the real reason, not a Docker skip.
+- [ ] 5.2 GREEN: add `uq_customer_profile_auth_customer_id` and `uq_customer_branch_main` (`CREATE UNIQUE INDEX ... WHERE ...`) to the 1.3 migration file; re-run 5.1.
+- [ ] 5.3 Run the full 5.1 suite with Docker actually running; record the exact pass/fail. A `describeWithDocker`-skipped run does not count as passing.
 
 ## Phase 6: API E2E tests
 
-- [x] 6.1 RED: `test/customers.e2e-spec.ts` (supertest + mock auth `X-User-Id`/`X-Roles`/`X-Sales-Rep-Id`) — rep sees only own portfolio (no `salesRepId` query param); foreign `GET :id` → 404; `ownerSalesRepId` in create body → 400; non-admin reassignment attempt rejected; admin reassigns successfully. First run: 4/5 passed, 1 failed for a real reason (reassign-ownership test 400'd because `class-validator`'s `@IsUUID()` defaults to version `'all'`, which requires an RFC4122 variant nibble the test's placeholder UUIDs lacked — fixed the test fixtures, not production code).
-- [x] 6.2 GREEN: confirmed 6.1 passes against the fully wired stack (Phase 4) — 5/5 passed after the fixture fix.
+- [ ] 6.1 RED: `test/customers.e2e-spec.ts` (supertest + mock auth `X-User-Id`/`X-Roles`) — rep sees only own portfolio (no `salesRepId` query param); foreign `GET :id` → 404; `ownerSalesRepId` in create body → 400; non-admin reassignment attempt rejected; admin reassigns successfully.
+- [ ] 6.2 GREEN: confirm 6.1 passes against the fully wired stack (Phase 4).
 
 ## Phase 7: Final verification
 
-- [x] 7.1 `pnpm migration:run` → `pnpm migration:revert` → `pnpm migration:run` clean on a throwaway, ephemeral `docker run --rm` container DB (port 55433, dropped afterward) — never against the deployed Railway DB. All 6 migrations ran; only `AddCustomersSchema1779738126227` reverted/re-ran on the revert step (targeted correctly); clean throughout.
-- [x] 7.2 `pnpm test` → 198/198 (20 suites). `pnpm test:e2e` (Docker running) → 3/4 suites green (20/20 of our tests), 1 pre-existing unrelated failure in `test/app.e2e-spec.ts` (byte-identical to `origin/main`, zero diff — fails because this worktree has no committed `.env` and that file boots the full `AppModule` without a DB override, unlike our two new specs which set `DB_*` env vars before importing `AppModule`; not introduced by this change). Scoped `npx eslint` on the 3 touched files → 0 errors. `pnpm build` → clean.
-- [x] 7.3 Confirmed zero diff in `src/modules/orders/**`, `sales`, `billing`, `notifications` via `git diff --stat origin/main` — empty output.
+- [ ] 7.1 `pnpm migration:run` → `pnpm migration:revert` → `pnpm migration:run` clean on a throwaway DB.
+- [ ] 7.2 `pnpm test`, `pnpm test:e2e` (Docker running), `pnpm lint`, `pnpm build` all pass; record results.
+- [ ] 7.3 Confirm zero diff in `src/modules/orders/**`, `sales`, `billing`, `notifications` (`git diff --stat origin/main`).

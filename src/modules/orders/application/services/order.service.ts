@@ -42,8 +42,8 @@ export class OrderService {
     private readonly dataSource: DataSource,
     private readonly reserveStock: ReserveStockUseCase,
     private readonly releaseStock: ReleaseStockUseCase,
-    @Inject(INVENTORY_REPOSITORY) private readonly inventoryRepo: InventoryRepository,
-    private readonly events: EventEmitter2,
+    @Inject(INVENTORY_REPOSITORY)
+    private readonly inventoryRepo: InventoryRepository,
   ) {}
 
   /**
@@ -71,7 +71,7 @@ export class OrderService {
     if (query.status) where.status = query.status;
     return this.orderRepo.find({
       where,
-      relations: ['items', 'payments'],
+      relations: ['items', 'items.product', 'payments'],
       order: { placedAt: 'DESC' },
     });
   }
@@ -79,20 +79,17 @@ export class OrderService {
   async findById(id: string): Promise<OrderEntity> {
     const found = await this.orderRepo.findOne({
       where: { id },
-      relations: ['items', 'payments', 'providerBranch'],
+      relations: ['items', 'items.product', 'payments', 'providerBranch'],
     });
     if (!found) throw new NotFoundException(`Order ${id} not found`);
     return found;
   }
 
-  /**
-   * `actor` is the authenticated caller, used only to default the contact email
-   * from the JWT claim. It is optional so in-process callers (quote conversion)
-   * keep working; those orders simply carry whatever contact the DTO supplies.
-   */
-  async create(dto: CreateOrderDto, actor?: AuthenticatedUser): Promise<OrderEntity> {
-    const created = await this.dataSource.transaction(async (tx) => {
-      const products = await this.loadProducts(dto.items.map((i) => i.productId));
+  async create(dto: CreateOrderDto): Promise<OrderEntity> {
+    return this.dataSource.transaction(async (tx) => {
+      const products = await this.loadProducts(
+        dto.items.map((i) => i.productId),
+      );
       const { subtotal, taxTotal, items } = this.buildItems(dto, products);
 
       const order = await tx.getRepository(OrderEntity).save(
@@ -116,13 +113,19 @@ export class OrderService {
         }),
       );
 
-      await tx.getRepository(OrderItemEntity).save(
-        items.map((item) => tx.getRepository(OrderItemEntity).create({ ...item, orderId: order.id })),
-      );
+      await tx
+        .getRepository(OrderItemEntity)
+        .save(
+          items.map((item) =>
+            tx
+              .getRepository(OrderItemEntity)
+              .create({ ...item, orderId: order.id }),
+          ),
+        );
 
       const full = await tx.getRepository(OrderEntity).findOne({
         where: { id: order.id },
-        relations: ['items'],
+        relations: ['items', 'items.product'],
       });
       if (!full) throw new NotFoundException(`Order ${order.id} not found`);
 
@@ -200,14 +203,19 @@ export class OrderService {
     return saved;
   }
 
-  async addPayment(orderId: string, dto: CreateOrderPaymentDto): Promise<OrderPaymentEntity> {
+  async addPayment(
+    orderId: string,
+    dto: CreateOrderPaymentDto,
+  ): Promise<OrderPaymentEntity> {
     await this.findById(orderId);
     return this.paymentRepo.save(this.paymentRepo.create({ orderId, ...dto }));
   }
 
   private async reserveForOrder(order: OrderEntity): Promise<void> {
     if (!order.providerBranchId) {
-      throw new BadRequestException('providerBranchId is required to reserve inventory');
+      throw new BadRequestException(
+        'providerBranchId is required to reserve inventory',
+      );
     }
     if (!order.items?.length) return;
 
@@ -238,7 +246,9 @@ export class OrderService {
     }
   }
 
-  private async loadProducts(ids: number[]): Promise<Map<number, ProductEntity>> {
+  private async loadProducts(
+    ids: number[],
+  ): Promise<Map<number, ProductEntity>> {
     const products = await this.productRepo.find({ where: { id: In(ids) } });
     const map = new Map(products.map((p) => [p.id, p]));
     for (const id of ids) {
