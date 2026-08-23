@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { STOCK_FEED_CLIENT } from './application/ports/stock-feed.client';
-import { SYNC_LOCK } from './application/ports/sync-lock';
+import { SYNC_LOCK } from '../../shared/database/sync-lock';
 import { RoughCountryStockSyncService } from './application/services/rough-country-stock-sync.service';
 import { RoughCountryXlsxFeedClient } from './infrastructure/feed/rough-country-xlsx-feed.client';
 import { StockSyncController } from './infrastructure/http/stock-sync.controller';
-import { PostgresSyncLock } from './infrastructure/persistence/postgres-sync.lock';
+import { PostgresSyncLock } from '../../shared/database/postgres-sync.lock';
 import { StockSyncScheduler } from './infrastructure/scheduler/stock-sync.scheduler';
 
 /**

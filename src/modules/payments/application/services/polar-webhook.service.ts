@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { OrderPaymentEntity } from '../../../orders/domain/entities/order-payment.entity';
+import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
+import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { PolarCheckoutEntity } from '../../domain/entities/polar-checkout.entity';
 import { WebhookEventEntity } from '../../domain/entities/webhook-event.entity';
@@ -31,6 +34,31 @@ export class PolarWebhookService {
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
   ) {}
+
+  /**
+   * Announces an order transition to whoever is listening.
+   *
+   * Notifications live outside this module and are not imported here — the
+   * dependency runs one way, through the emitter. Contact comes off the order
+   * because this handler has no user context at all: the webhook is public.
+   */
+  private emitOrderEvent(
+    eventKey: NotificationEventKey,
+    order: OrderEntity,
+    extra: { trackingNumber?: string | null; carrierName?: string | null } = {},
+  ): void {
+    const payload: NotificationEmittedEvent = {
+      eventKey,
+      recipientUserId: order.customerId,
+      entityType: 'order',
+      entityId: order.id,
+      reference: order.orderNumber,
+      contact: { email: order.shipToEmail, phone: order.shipToPhone },
+      ...extra,
+    };
+    this.events.emit(eventKey, payload);
+  }
+
 
   async handle(event: PolarWebhookPayload): Promise<void> {
     const polarEventId = `${event.type}:${event.data.id}`;
@@ -100,7 +128,7 @@ export class PolarWebhookService {
         .findOne({ where: { id: orderId } });
       if (!order) {
         this.logger.warn(`order.paid: internal order ${orderId} not found`);
-        return;
+        return null;
       }
 
       if (order.paymentStatus !== 'paid') {
@@ -143,7 +171,14 @@ export class PolarWebhookService {
           }),
         );
       }
+
+      return order;
     });
+
+    // After commit: a listener must never see a payment a rollback is about to
+    // undo. Polar redelivers on failure, and the notification is keyed on
+    // (event, order, recipient), so a replay records nothing new.
+    if (paid) this.emitOrderEvent('payment.received', paid);
   }
 
   private async handleOrderRefunded(event: PolarWebhookPayload): Promise<void> {
@@ -154,7 +189,8 @@ export class PolarWebhookService {
     if (!order) return;
 
     order.paymentStatus = 'refunded';
-    await this.orderRepo.save(order);
+    const saved = await this.orderRepo.save(order);
+    this.emitOrderEvent('payment.refunded', saved);
   }
 
   private async handleCheckoutStatus(

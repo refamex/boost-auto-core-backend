@@ -1,0 +1,233 @@
+import { NotFoundException } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { DataSource } from 'typeorm';
+import { NotificationEntity } from '../../domain/entities/notification.entity';
+import { NOTIFICATION_CHANNELS } from '../ports/notification-channel';
+import { NotificationService } from './notification.service';
+
+const RECIPIENT = 'user-1';
+const ORDER_ID = 'order-1';
+
+describe('NotificationService', () => {
+  const repo = {
+    findOne: jest.fn(),
+    findAndCount: jest.fn().mockResolvedValue([[], 0]),
+    count: jest.fn().mockResolvedValue(0),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
+    update: jest.fn().mockResolvedValue({ affected: 3 }),
+  };
+
+  // The transaction callback gets repositories keyed by entity class, following
+  // polar-webhook.service.spec.ts — the only precedent in this repo.
+  const notificationTxRepo = {
+    create: jest.fn((x: unknown) => x),
+    save: jest.fn((x: Record<string, unknown>) =>
+      Promise.resolve({ id: 'notif-1', ...x }),
+    ),
+  };
+  const outboxTxRepo = {
+    create: jest.fn((x: unknown) => x),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
+  };
+  const txRepos = {
+    getRepository: jest.fn((entity: unknown) =>
+      entity === NotificationEntity ? notificationTxRepo : outboxTxRepo,
+    ),
+  };
+  const dataSource = {
+    transaction: jest.fn((fn: (t: unknown) => unknown) => fn(txRepos)),
+  };
+
+  const inapp = {
+    name: 'inapp',
+    isEnabled: jest.fn(() => true),
+    resolveDestination: jest.fn(() => null),
+    send: jest.fn(),
+  };
+  const email = {
+    name: 'email',
+    isEnabled: jest.fn(() => true),
+    resolveDestination: jest.fn(
+      (c: { email?: string | null }) => c.email ?? null,
+    ),
+    send: jest.fn(),
+  };
+
+  // Jest hands mock arguments back as `any`; narrow them once here instead of
+  // sprinkling casts through the assertions.
+  const queuedChannels = (): Record<string, unknown>[] => {
+    const calls = outboxTxRepo.save.mock.calls as unknown as [
+      Record<string, unknown>[],
+    ][];
+    return calls[0]?.[0] ?? [];
+  };
+  const findAndCountArg = (): { where: Record<string, unknown> } => {
+    const calls = repo.findAndCount.mock.calls as unknown as [
+      { where: Record<string, unknown> },
+    ][];
+    return calls[0][0];
+  };
+  const updateCriteria = (): Record<string, unknown> => {
+    const calls = repo.update.mock.calls as unknown as [
+      Record<string, unknown>,
+    ][];
+    return calls[0][0];
+  };
+
+  let service: NotificationService;
+
+  const input = {
+    eventKey: 'payment.received' as const,
+    recipientUserId: RECIPIENT,
+    entityType: 'order',
+    entityId: ORDER_ID,
+    context: { reference: 'ORD-1' },
+    contact: { email: 'cliente@example.com' },
+  };
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    repo.findOne.mockResolvedValue(null);
+    inapp.isEnabled.mockReturnValue(true);
+    email.isEnabled.mockReturnValue(true);
+
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        NotificationService,
+        { provide: getRepositoryToken(NotificationEntity), useValue: repo },
+        { provide: DataSource, useValue: dataSource },
+        { provide: NOTIFICATION_CHANNELS, useValue: [inapp, email] },
+      ],
+    }).compile();
+    service = moduleRef.get(NotificationService);
+  });
+
+  describe('create', () => {
+    it('renders the copy from the catalogue', async () => {
+      await service.create(input);
+      expect(notificationTxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Recibimos tu pago del pedido ORD-1',
+          category: 'invoice',
+        }),
+      );
+    });
+
+    it('stamps a dedupe key and a deep link', async () => {
+      await service.create(input);
+      expect(notificationTxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          dedupeKey: `payment.received:${ORDER_ID}:${RECIPIENT}`,
+          link: `/cuenta/pedido/${ORDER_ID}`,
+        }),
+      );
+    });
+
+    it('queues one delivery per enabled channel', async () => {
+      await service.create(input);
+      expect(queuedChannels().map((d) => d.channel)).toEqual([
+        'inapp',
+        'email',
+      ]);
+    });
+
+    it('freezes the destination on the outbox row', async () => {
+      await service.create(input);
+      const emailRow = queuedChannels().find((d) => d.channel === 'email');
+      expect(emailRow).toMatchObject({
+        destination: 'cliente@example.com',
+        status: 'pending',
+      });
+    });
+
+    it('skips a channel with no destination instead of queueing it', async () => {
+      // Retrying an address that does not exist would burn every attempt and
+      // then report a failure nobody can act on.
+      await service.create({ ...input, contact: {} });
+      const emailRow = queuedChannels().find((d) => d.channel === 'email');
+      expect(emailRow).toMatchObject({ status: 'skipped' });
+    });
+
+    it('still queues the in-app row when there is no email', async () => {
+      await service.create({ ...input, contact: {} });
+      const inappRow = queuedChannels().find((d) => d.channel === 'inapp');
+      expect(inappRow).toMatchObject({ status: 'pending' });
+    });
+
+    it('leaves disabled channels out entirely', async () => {
+      email.isEnabled.mockReturnValue(false);
+      await service.create(input);
+      expect(queuedChannels().map((d) => d.channel)).toEqual(['inapp']);
+    });
+
+    it('is idempotent: a redelivered event creates nothing new', async () => {
+      const existing = {
+        id: 'notif-1',
+        dedupeKey: `payment.received:${ORDER_ID}:${RECIPIENT}`,
+      };
+      repo.findOne.mockResolvedValue(existing);
+
+      const result = await service.create(input);
+
+      expect(result).toBe(existing);
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+      // The critical half: the second call must not re-queue deliveries either,
+      // or the customer gets the same email twice.
+      expect(outboxTxRepo.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reading', () => {
+    it('lists only the caller own notifications', async () => {
+      await service.list(RECIPIENT, { page: 1, limit: 25, skip: 0 });
+      expect(repo.findAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { recipientUserId: RECIPIENT } }),
+      );
+    });
+
+    it('filters to unread when asked', async () => {
+      await service.list(RECIPIENT, {
+        page: 1,
+        limit: 25,
+        skip: 0,
+        unreadOnly: true,
+      });
+      const where = findAndCountArg().where;
+      expect(where.readAt).toBeDefined();
+    });
+
+    it('marks a notification read', async () => {
+      repo.findOne.mockResolvedValue({ id: 'notif-1', readAt: null });
+      const result = await service.markRead('notif-1', RECIPIENT);
+      expect(result.readAt).toBeInstanceOf(Date);
+      expect(repo.save).toHaveBeenCalled();
+    });
+
+    it('does not move the read timestamp on a second read', async () => {
+      const alreadyRead = new Date('2026-01-01T00:00:00.000Z');
+      repo.findOne.mockResolvedValue({ id: 'notif-1', readAt: alreadyRead });
+      const result = await service.markRead('notif-1', RECIPIENT);
+      expect(result.readAt).toBe(alreadyRead);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('answers 404, not 403, for somebody else notification', async () => {
+      // The lookup is scoped by recipient, so "absent" and "not yours" are the
+      // same answer and the endpoint confirms nothing.
+      repo.findOne.mockResolvedValue(null);
+      await expect(service.markRead('notif-1', RECIPIENT)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { id: 'notif-1', recipientUserId: RECIPIENT },
+      });
+    });
+
+    it('marks all read scoped to the caller', async () => {
+      const result = await service.markAllRead(RECIPIENT);
+      expect(result).toEqual({ updated: 3 });
+      expect(updateCriteria()).toMatchObject({ recipientUserId: RECIPIENT });
+    });
+  });
+});

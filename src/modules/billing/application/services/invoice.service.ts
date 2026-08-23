@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
+import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { InvoiceDocumentEntity } from '../../domain/entities/invoice-document.entity';
 import { InvoiceEntity } from '../../domain/entities/invoice.entity';
 import {
@@ -21,6 +22,7 @@ export class InvoiceService {
     private readonly invoiceRepo: Repository<InvoiceEntity>,
     @InjectRepository(InvoiceDocumentEntity)
     private readonly documentRepo: Repository<InvoiceDocumentEntity>,
+    private readonly events: EventEmitter2,
   ) {}
 
   list(query: InvoiceQueryDto): Promise<InvoiceEntity[]> {

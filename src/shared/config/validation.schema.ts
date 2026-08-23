@@ -113,4 +113,6 @@ export const validationSchema = Joi.object({
     .positive()
     .when('ROUGH_COUNTRY_SYNC_ENABLED', { is: true, then: Joi.required() }),
   ROUGH_COUNTRY_SYNC_TZ: Joi.string().default('America/Mexico_City'),
+
+  NOTIFICATIONS_EMAIL_ENABLED: Joi.boolean().default(false),
 });

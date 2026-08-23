@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
+import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
+import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { ShipmentTrackingEventEntity } from '../../domain/entities/shipment-tracking-event.entity';
 import { ShipmentEntity } from '../../domain/entities/shipment.entity';
@@ -28,6 +31,16 @@ const ORDER_STATUS_MAP: Record<string, string> = {
   cancelled: 'cancelled',
 };
 
+// De los estados del pedido a los avisos al cliente. `cancelled` no está: la
+// cancelación del envío ya se avisa desde ShipmentService.cancel, y avisar dos
+// veces por lo mismo es peor que no avisar.
+const SHIPPING_EVENT_MAP: Record<string, NotificationEventKey | undefined> = {
+  in_transit: 'shipment.in_transit',
+  out_for_delivery: 'shipment.out_for_delivery',
+  delivered: 'shipment.delivered',
+  exception: 'shipment.exception',
+};
+
 @Injectable()
 export class ShippingWebhookService {
   private readonly logger = new Logger(ShippingWebhookService.name);
@@ -41,6 +54,7 @@ export class ShippingWebhookService {
     private readonly trackingRepo: Repository<ShipmentTrackingEventEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
+    private readonly events: EventEmitter2,
   ) {}
 
   async handle(event: SkydropxWebhookPayload): Promise<void> {
@@ -105,6 +119,24 @@ export class ShippingWebhookService {
         if (order) {
           order.shippingStatus = orderStatus;
           await this.orderRepo.save(order);
+
+          // Only the five mapped statuses reach the order, and those are exactly
+          // the ones worth telling a customer about. Unmapped carrier states
+          // (label_generated, picked_up, …) update the shipment and stay quiet.
+          const eventKey = SHIPPING_EVENT_MAP[orderStatus];
+          if (eventKey) {
+            const payload: NotificationEmittedEvent = {
+              eventKey,
+              recipientUserId: order.customerId,
+              entityType: 'order',
+              entityId: order.id,
+              reference: order.orderNumber,
+              contact: { email: order.shipToEmail, phone: order.shipToPhone },
+              trackingNumber: shipment.trackingNumber,
+              carrierName: shipment.carrierName,
+            };
+            this.events.emit(eventKey, payload);
+          }
         }
       }
     }

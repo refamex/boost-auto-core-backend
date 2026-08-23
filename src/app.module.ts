@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import configuration, { AppConfig } from './shared/config/configuration';
@@ -17,8 +18,11 @@ import { SalesModule } from './modules/sales/sales.module';
 import { BillingModule } from './modules/billing/billing.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { QuotesModule } from './modules/quotes/quotes.module';
 import { ShippingModule } from './modules/shipping/shipping.module';
 import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
+import { CustomersModule } from './modules/customers/customers.module';
 
 @Module({
   imports: [
@@ -51,6 +55,9 @@ import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
       },
     }),
     ScheduleModule.forRoot(),
+    // Wildcards so the notifications listener can subscribe to `order.**` and
+    // friends rather than enumerating every event key it cares about.
+    EventEmitterModule.forRoot({ wildcard: true, delimiter: '.' }),
     AuthModule,
     HealthModule,
     PimModule,
@@ -65,7 +72,10 @@ import { StockSyncModule } from './modules/stock-sync/stock-sync.module';
     IntegrationsModule,
     PaymentsModule,
     ShippingModule,
+    QuotesModule,
+    NotificationsModule,
     StockSyncModule,
+    CustomersModule,
   ],
 })
 export class AppModule {}
