@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProviderEntity } from '../../domain/entities/provider.entity';
-import { CreateProviderDto, UpdateProviderDto } from '../../infrastructure/http/dto/supplier.dto';
+import {
+  CreateProviderDto,
+  UpdateProviderDto,
+} from '../../infrastructure/http/dto/supplier.dto';
 
 @Injectable()
 export class ProviderService {

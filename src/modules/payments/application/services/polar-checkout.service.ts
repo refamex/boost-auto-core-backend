@@ -14,7 +14,12 @@ import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { PolarCheckoutEntity } from '../../domain/entities/polar-checkout.entity';
 import { POLAR_CLIENT, PolarClient } from '../ports/polar.client';
 
-const TERMINAL_CHECKOUT_STATUSES = ['succeeded', 'confirmed', 'expired', 'failed'];
+const TERMINAL_CHECKOUT_STATUSES = [
+  'succeeded',
+  'confirmed',
+  'expired',
+  'failed',
+];
 
 @Injectable()
 export class PolarCheckoutService {
@@ -29,7 +34,9 @@ export class PolarCheckoutService {
 
   private assertEnabled(): void {
     if (!this.config.get('polar.enabled', { infer: true })) {
-      throw new ServiceUnavailableException('Polar payments are not enabled (POLAR_ENABLED=false)');
+      throw new ServiceUnavailableException(
+        'Polar payments are not enabled (POLAR_ENABLED=false)',
+      );
     }
   }
 
@@ -39,7 +46,9 @@ export class PolarCheckoutService {
     const order = await this.orderRepo.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);
     if (order.grandTotal <= 0) {
-      throw new BadRequestException('Order grandTotal must be greater than zero');
+      throw new BadRequestException(
+        'Order grandTotal must be greater than zero',
+      );
     }
     if (order.paymentStatus === 'paid') {
       throw new ConflictException('Order is already paid');
@@ -50,7 +59,9 @@ export class PolarCheckoutService {
       order: { createdAt: 'DESC' },
     });
     if (open) {
-      throw new ConflictException('An open Polar checkout already exists for this order');
+      throw new ConflictException(
+        'An open Polar checkout already exists for this order',
+      );
     }
 
     const currency = this.config.get('polar.currency', { infer: true });
@@ -79,12 +90,16 @@ export class PolarCheckoutService {
       where: { orderId },
       order: { createdAt: 'DESC' },
     });
-    if (!found) throw new NotFoundException(`No Polar checkout for order ${orderId}`);
+    if (!found)
+      throw new NotFoundException(`No Polar checkout for order ${orderId}`);
     return found;
   }
 
   async findById(id: string): Promise<PolarCheckoutEntity> {
-    const found = await this.checkoutRepo.findOne({ where: { id }, relations: ['order'] });
+    const found = await this.checkoutRepo.findOne({
+      where: { id },
+      relations: ['order'],
+    });
     if (!found) throw new NotFoundException(`PolarCheckout ${id} not found`);
     return found;
   }

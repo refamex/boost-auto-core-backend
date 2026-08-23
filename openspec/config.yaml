@@ -1,0 +1,68 @@
+# openspec/config.yaml
+schema: spec-driven
+
+context: |
+  Tech stack: NestJS 11 + TypeScript 5.7 (Express), pnpm 10.33, TypeORM 0.3 over Postgres 16 (12 schemas incl. payments).
+  Architecture: hexagonal-ish bounded contexts under src/modules/* (domain -> application -> infrastructure). Layer depth is deliberately uneven: inventory has a rich domain aggregate (source of truth for stock, pessimistic SELECT ... FOR UPDATE); pim/suppliers are thin CRUD. Shared layer in src/shared (config/Joi, database DataSource synchronize:false, auth JWT RS256/JWKS, common filters+interceptors, health).
+  Testing: Jest 29 (ts-jest). Unit+integration via `pnpm test` (rootDir src, *.spec.ts); API E2E via `pnpm test:e2e` (test/jest-e2e.json, supertest + @testcontainers/postgresql).
+  Style: ESLint 9 (flat config) + Prettier. strictNullChecks on, noImplicitAny off; no-explicit-any off; no-floating-promises / no-unsafe-argument are warn (won't fail build).
+
+strict_tdd: true
+
+testing:
+  strict_tdd: true
+  detected: 2026-07-16
+  test_runner:
+    framework: jest
+    command: pnpm test
+  layers:
+    unit:
+      available: true
+      tool: jest (ts-jest)
+    integration:
+      available: true
+      tool: "@testcontainers/postgresql + supertest"
+    e2e:
+      available: true
+      tool: "supertest (API-level, pnpm test:e2e) — no browser E2E (no playwright/cypress)"
+  coverage:
+    available: true
+    command: pnpm test:cov
+  quality:
+    linter:
+      available: true
+      command: pnpm lint      # eslint --fix
+    type_checker:
+      available: true
+      command: npx tsc --noEmit
+    formatter:
+      available: true
+      command: pnpm format    # prettier --write
+
+rules:
+  proposal:
+    - Include a rollback plan for risky changes (especially migrations — the SQL schema is the source of truth, synchronize:false)
+    - Identify affected bounded contexts (src/modules/*) and any shared ports touched
+  specs:
+    - Use Given/When/Then format for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows (esp. cross-context in-process calls, e.g. orders -> INVENTORY_REPOSITORY)
+    - Document architecture decisions with rationale; match the existing module's layer depth (do NOT over-engineer pim/suppliers)
+  tasks:
+    - Group tasks by phase (infrastructure, implementation, testing)
+    - Use hierarchical numbering (1.1, 1.2, ...)
+    - Keep tasks small enough to complete in one session
+  apply:
+    - Follow existing code patterns and conventions
+    - Never mutate stock / reserved_stock columns directly — go through inventory.aggregate
+    - Multi-schema entities MUST declare @Entity({ schema, name })
+    - Never regenerate the SQL schema from entities; migrations are hand-written and preserved verbatim
+    tdd: true
+    test_command: pnpm test
+  verify:
+    test_command: pnpm test
+    build_command: pnpm build
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas (large removals)
