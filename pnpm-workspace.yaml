@@ -1,0 +1,7 @@
+allowBuilds:
+  '@nestjs/core': false
+  '@scarf/scarf': false
+  '@swc/core': false
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
