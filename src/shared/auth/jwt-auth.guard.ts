@@ -1,4 +1,9 @@
-import { ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  ExecutionContext,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
@@ -34,7 +39,9 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 
   private attachMockUser(ctx: ExecutionContext): boolean {
-    const req = ctx.switchToHttp().getRequest<Request & { user?: AuthenticatedUser }>();
+    const req = ctx
+      .switchToHttp()
+      .getRequest<Request & { user?: AuthenticatedUser }>();
     const userId = req.headers['x-user-id'];
     if (!userId || typeof userId !== 'string') {
       this.logger.warn('Mock auth: missing X-User-Id header');
@@ -44,7 +51,10 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const rolesHeader = req.headers['x-roles'];
     const roles =
       typeof rolesHeader === 'string'
-        ? rolesHeader.split(',').map((r) => r.trim()).filter(Boolean)
+        ? rolesHeader
+            .split(',')
+            .map((r) => r.trim())
+            .filter(Boolean)
         : [];
 
     req.user = { id: userId, roles };

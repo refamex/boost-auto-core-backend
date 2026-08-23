@@ -30,8 +30,6 @@ export class PolarWebhookService {
     private readonly checkoutRepo: Repository<PolarCheckoutEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
-    @InjectRepository(OrderPaymentEntity)
-    private readonly paymentRepo: Repository<OrderPaymentEntity>,
   ) {}
 
   async handle(event: PolarWebhookPayload): Promise<void> {
@@ -42,11 +40,17 @@ export class PolarWebhookService {
         this.webhookRepo.create({
           polarEventId,
           eventType: event.type,
-          payloadJson: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+          payloadJson: JSON.parse(JSON.stringify(event)) as Record<
+            string,
+            unknown
+          >,
         }),
       );
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         this.logger.debug(`Duplicate webhook ${polarEventId}, skipping`);
         return;
       }
@@ -58,11 +62,17 @@ export class PolarWebhookService {
         await this.handleOrderPaid(event);
       } else if (event.type === 'order.refunded') {
         await this.handleOrderRefunded(event);
-      } else if (event.type === 'checkout.updated' || event.type === 'checkout.expired') {
+      } else if (
+        event.type === 'checkout.updated' ||
+        event.type === 'checkout.expired'
+      ) {
         await this.handleCheckoutStatus(event);
       }
 
-      await this.webhookRepo.update({ polarEventId }, { processedAt: new Date() });
+      await this.webhookRepo.update(
+        { polarEventId },
+        { processedAt: new Date() },
+      );
     } catch (err) {
       this.logger.error(`Failed processing ${polarEventId}`, err);
       throw err;
@@ -85,7 +95,9 @@ export class PolarWebhookService {
     const amount = (event.data.totalAmount ?? 0) / 100;
 
     await this.dataSource.transaction(async (tx) => {
-      const order = await tx.getRepository(OrderEntity).findOne({ where: { id: orderId } });
+      const order = await tx
+        .getRepository(OrderEntity)
+        .findOne({ where: { id: orderId } });
       if (!order) {
         this.logger.warn(`order.paid: internal order ${orderId} not found`);
         return;
@@ -98,7 +110,9 @@ export class PolarWebhookService {
 
       const checkoutQb = tx.getRepository(PolarCheckoutEntity);
       let checkout = event.data.checkoutId
-        ? await checkoutQb.findOne({ where: { polarCheckoutId: event.data.checkoutId } })
+        ? await checkoutQb.findOne({
+            where: { polarCheckoutId: event.data.checkoutId },
+          })
         : null;
       if (!checkout) {
         checkout = await checkoutQb.findOne({
@@ -112,9 +126,11 @@ export class PolarWebhookService {
         await checkoutQb.save(checkout);
       }
 
-      const existingPayment = await tx.getRepository(OrderPaymentEntity).findOne({
-        where: { orderId, transactionRef: event.data.id },
-      });
+      const existingPayment = await tx
+        .getRepository(OrderPaymentEntity)
+        .findOne({
+          where: { orderId, transactionRef: event.data.id },
+        });
       if (!existingPayment) {
         await tx.getRepository(OrderPaymentEntity).save(
           tx.getRepository(OrderPaymentEntity).create({
@@ -141,7 +157,9 @@ export class PolarWebhookService {
     await this.orderRepo.save(order);
   }
 
-  private async handleCheckoutStatus(event: PolarWebhookPayload): Promise<void> {
+  private async handleCheckoutStatus(
+    event: PolarWebhookPayload,
+  ): Promise<void> {
     const checkoutId = event.data.id;
     const checkout = await this.checkoutRepo.findOne({
       where: { polarCheckoutId: checkoutId },

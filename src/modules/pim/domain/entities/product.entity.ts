@@ -31,28 +31,48 @@ export class ProductEntity {
   @Column({ type: 'text', nullable: true })
   description?: string | null;
 
-  @Column({ type: 'bigint', name: 'category_id', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'category_id',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   categoryId?: number | null;
 
   @ManyToOne(() => CategoryEntity)
   @JoinColumn({ name: 'category_id' })
   category?: CategoryEntity;
 
-  @Column({ type: 'bigint', name: 'brand_id', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'brand_id',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   brandId?: number | null;
 
   @ManyToOne(() => BrandEntity, { onDelete: 'CASCADE', onUpdate: 'CASCADE' })
   @JoinColumn({ name: 'brand_id' })
   brand?: BrandEntity;
 
-  @Column({ type: 'bigint', name: 'provider_id', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'provider_id',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   providerId?: number | null;
 
   @ManyToOne(() => ProviderEntity)
   @JoinColumn({ name: 'provider_id' })
   provider?: ProviderEntity;
 
-  @Column({ type: 'bigint', name: 'auto_part_type_id', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'auto_part_type_id',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   autoPartTypeId?: number | null;
 
   @ManyToOne(() => AutoPartCatalogEntity)
@@ -65,7 +85,12 @@ export class ProductEntity {
   @Column({ type: 'text', name: 'classification_by_rotation', nullable: true })
   classificationByRotation?: string | null;
 
-  @Column({ type: 'bigint', name: 'warranty_period', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'warranty_period',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   warrantyPeriod?: number | null;
 
   @Column({ type: 'boolean', name: 'is_visible', default: true })

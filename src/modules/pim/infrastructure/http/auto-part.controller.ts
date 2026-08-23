@@ -38,7 +38,10 @@ export class AutoPartController {
 
   @Patch(':id')
   @Roles('pim:write')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAutoPartDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateAutoPartDto,
+  ) {
     return this.svc.update(id, dto);
   }
 

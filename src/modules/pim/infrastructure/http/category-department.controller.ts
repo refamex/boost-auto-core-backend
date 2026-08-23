@@ -41,7 +41,10 @@ export class CategoryDepartmentController {
 
   @Patch(':id')
   @Roles('pim:write')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCategoryDepartmentDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCategoryDepartmentDto,
+  ) {
     return this.svc.update(id, dto);
   }
 

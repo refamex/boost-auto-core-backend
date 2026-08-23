@@ -38,7 +38,8 @@ export class OrderService {
     private readonly dataSource: DataSource,
     private readonly reserveStock: ReserveStockUseCase,
     private readonly releaseStock: ReleaseStockUseCase,
-    @Inject(INVENTORY_REPOSITORY) private readonly inventoryRepo: InventoryRepository,
+    @Inject(INVENTORY_REPOSITORY)
+    private readonly inventoryRepo: InventoryRepository,
   ) {}
 
   list(query: OrderQueryDto): Promise<OrderEntity[]> {
@@ -47,7 +48,7 @@ export class OrderService {
     if (query.status) where.status = query.status;
     return this.orderRepo.find({
       where,
-      relations: ['items', 'payments'],
+      relations: ['items', 'items.product', 'payments'],
       order: { placedAt: 'DESC' },
     });
   }
@@ -55,7 +56,7 @@ export class OrderService {
   async findById(id: string): Promise<OrderEntity> {
     const found = await this.orderRepo.findOne({
       where: { id },
-      relations: ['items', 'payments', 'providerBranch'],
+      relations: ['items', 'items.product', 'payments', 'providerBranch'],
     });
     if (!found) throw new NotFoundException(`Order ${id} not found`);
     return found;
@@ -63,7 +64,9 @@ export class OrderService {
 
   async create(dto: CreateOrderDto): Promise<OrderEntity> {
     return this.dataSource.transaction(async (tx) => {
-      const products = await this.loadProducts(dto.items.map((i) => i.productId));
+      const products = await this.loadProducts(
+        dto.items.map((i) => i.productId),
+      );
       const { subtotal, taxTotal, items } = this.buildItems(dto, products);
 
       const order = await tx.getRepository(OrderEntity).save(
@@ -81,13 +84,19 @@ export class OrderService {
         }),
       );
 
-      await tx.getRepository(OrderItemEntity).save(
-        items.map((item) => tx.getRepository(OrderItemEntity).create({ ...item, orderId: order.id })),
-      );
+      await tx
+        .getRepository(OrderItemEntity)
+        .save(
+          items.map((item) =>
+            tx
+              .getRepository(OrderItemEntity)
+              .create({ ...item, orderId: order.id }),
+          ),
+        );
 
       const full = await tx.getRepository(OrderEntity).findOne({
         where: { id: order.id },
-        relations: ['items'],
+        relations: ['items', 'items.product'],
       });
       if (!full) throw new NotFoundException(`Order ${order.id} not found`);
 
@@ -129,14 +138,19 @@ export class OrderService {
     return this.orderRepo.save(order);
   }
 
-  async addPayment(orderId: string, dto: CreateOrderPaymentDto): Promise<OrderPaymentEntity> {
+  async addPayment(
+    orderId: string,
+    dto: CreateOrderPaymentDto,
+  ): Promise<OrderPaymentEntity> {
     await this.findById(orderId);
     return this.paymentRepo.save(this.paymentRepo.create({ orderId, ...dto }));
   }
 
   private async reserveForOrder(order: OrderEntity): Promise<void> {
     if (!order.providerBranchId) {
-      throw new BadRequestException('providerBranchId is required to reserve inventory');
+      throw new BadRequestException(
+        'providerBranchId is required to reserve inventory',
+      );
     }
     if (!order.items?.length) return;
 
@@ -167,7 +181,9 @@ export class OrderService {
     }
   }
 
-  private async loadProducts(ids: number[]): Promise<Map<number, ProductEntity>> {
+  private async loadProducts(
+    ids: number[],
+  ): Promise<Map<number, ProductEntity>> {
     const products = await this.productRepo.find({ where: { id: In(ids) } });
     const map = new Map(products.map((p) => [p.id, p]));
     for (const id of ids) {

@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AutoPartCatalogEntity } from '../../domain/entities/auto-part-catalog.entity';
-import { CreateAutoPartDto, UpdateAutoPartDto } from '../../infrastructure/http/dto/taxonomies.dto';
+import {
+  CreateAutoPartDto,
+  UpdateAutoPartDto,
+} from '../../infrastructure/http/dto/taxonomies.dto';
 
 @Injectable()
 export class AutoPartService {
@@ -12,7 +15,10 @@ export class AutoPartService {
   ) {}
 
   list(): Promise<AutoPartCatalogEntity[]> {
-    return this.repo.find({ order: { name: 'ASC' }, relations: ['category', 'volumeCategory'] });
+    return this.repo.find({
+      order: { name: 'ASC' },
+      relations: ['category', 'volumeCategory'],
+    });
   }
 
   async findById(id: number): Promise<AutoPartCatalogEntity> {
@@ -28,7 +34,10 @@ export class AutoPartService {
     return this.repo.save(this.repo.create(dto));
   }
 
-  async update(id: number, dto: UpdateAutoPartDto): Promise<AutoPartCatalogEntity> {
+  async update(
+    id: number,
+    dto: UpdateAutoPartDto,
+  ): Promise<AutoPartCatalogEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

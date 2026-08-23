@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { InvoiceDocumentEntity } from '../../domain/entities/invoice-document.entity';
@@ -55,7 +59,10 @@ export class InvoiceService {
         }),
       );
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException('invoice number conflict');
       }
       throw e;
@@ -72,19 +79,28 @@ export class InvoiceService {
     await this.invoiceRepo.remove(existing);
   }
 
-  async addDocument(invoiceId: string, dto: CreateInvoiceDocumentDto): Promise<InvoiceDocumentEntity> {
+  async addDocument(
+    invoiceId: string,
+    dto: CreateInvoiceDocumentDto,
+  ): Promise<InvoiceDocumentEntity> {
     await this.findById(invoiceId);
-    return this.documentRepo.save(this.documentRepo.create({ invoiceId, ...dto }));
+    return this.documentRepo.save(
+      this.documentRepo.create({ invoiceId, ...dto }),
+    );
   }
 
   async listDocuments(invoiceId: string): Promise<InvoiceDocumentEntity[]> {
     await this.findById(invoiceId);
-    return this.documentRepo.find({ where: { invoiceId }, order: { createdAt: 'DESC' } });
+    return this.documentRepo.find({
+      where: { invoiceId },
+      order: { createdAt: 'DESC' },
+    });
   }
 
   async removeDocument(documentId: string): Promise<void> {
     const doc = await this.documentRepo.findOne({ where: { id: documentId } });
-    if (!doc) throw new NotFoundException(`InvoiceDocument ${documentId} not found`);
+    if (!doc)
+      throw new NotFoundException(`InvoiceDocument ${documentId} not found`);
     await this.documentRepo.remove(doc);
   }
 
