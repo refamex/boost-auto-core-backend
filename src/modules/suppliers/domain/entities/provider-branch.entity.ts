@@ -15,7 +15,11 @@ export class ProviderBranchEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
 
-  @Column({ type: 'bigint', name: 'provider_id', transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'provider_id',
+    transformer: bigintTransformer,
+  })
   providerId!: number;
 
   @ManyToOne(() => ProviderEntity, (p) => p.branches)

@@ -1,8 +1,16 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { SaleEntity } from '../../domain/entities/sale.entity';
-import { CreateSaleDto, SaleQueryDto, UpdateSaleDto } from '../../infrastructure/http/dto/sale.dto';
+import {
+  CreateSaleDto,
+  SaleQueryDto,
+  UpdateSaleDto,
+} from '../../infrastructure/http/dto/sale.dto';
 
 @Injectable()
 export class SaleService {
@@ -15,11 +23,18 @@ export class SaleService {
     const where: FindOptionsWhere<SaleEntity> = {};
     if (query.customerId) where.customerId = query.customerId;
     if (query.orderId) where.orderId = query.orderId;
-    return this.repo.find({ where, relations: ['order'], order: { soldAt: 'DESC' } });
+    return this.repo.find({
+      where,
+      relations: ['order'],
+      order: { soldAt: 'DESC' },
+    });
   }
 
   async findById(id: string): Promise<SaleEntity> {
-    const found = await this.repo.findOne({ where: { id }, relations: ['order'] });
+    const found = await this.repo.findOne({
+      where: { id },
+      relations: ['order'],
+    });
     if (!found) throw new NotFoundException(`Sale ${id} not found`);
     return found;
   }
@@ -42,7 +57,10 @@ export class SaleService {
         }),
       );
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException('sale number conflict');
       }
       throw e;

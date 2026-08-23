@@ -47,7 +47,10 @@ export class ProviderController {
 
   @Patch(':id')
   @Roles('suppliers:write')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateProviderDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateProviderDto,
+  ) {
     return this.providers.update(id, dto);
   }
 
@@ -76,7 +79,10 @@ export class ProviderController {
 
   @Patch('branches/:branchId')
   @Roles('suppliers:write')
-  updateBranch(@Param('branchId') branchId: string, @Body() dto: UpdateProviderBranchDto) {
+  updateBranch(
+    @Param('branchId') branchId: string,
+    @Body() dto: UpdateProviderBranchDto,
+  ) {
     return this.branches.update(branchId, dto);
   }
 
