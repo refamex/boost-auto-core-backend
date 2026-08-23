@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
@@ -85,10 +86,25 @@ export class InvoiceService {
     invoiceId: string,
     dto: CreateInvoiceDocumentDto,
   ): Promise<InvoiceDocumentEntity> {
-    await this.findById(invoiceId);
-    return this.documentRepo.save(
+    const invoice = await this.findById(invoiceId);
+    const document = await this.documentRepo.save(
       this.documentRepo.create({ invoiceId, ...dto }),
     );
+
+    // Attaching the document, not creating the invoice, is the moment the
+    // customer actually has something to download.
+    const payload: NotificationEmittedEvent = {
+      eventKey: 'invoice.available',
+      recipientUserId: invoice.customerId,
+      entityType: 'invoice',
+      entityId: invoice.id,
+      reference: invoice.invoiceNumber,
+      // Invoices carry no contact column of their own, so the email channel
+      // records this delivery as skipped. The in-app feed is unaffected.
+    };
+    this.events.emit(payload.eventKey, payload);
+
+    return document;
   }
 
   async listDocuments(invoiceId: string): Promise<InvoiceDocumentEntity[]> {

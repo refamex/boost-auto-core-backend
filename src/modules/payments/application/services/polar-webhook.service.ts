@@ -33,6 +33,7 @@ export class PolarWebhookService {
     private readonly checkoutRepo: Repository<PolarCheckoutEntity>,
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -122,7 +123,7 @@ export class PolarWebhookService {
 
     const amount = (event.data.totalAmount ?? 0) / 100;
 
-    await this.dataSource.transaction(async (tx) => {
+    const paid = await this.dataSource.transaction(async (tx) => {
       const order = await tx
         .getRepository(OrderEntity)
         .findOne({ where: { id: orderId } });

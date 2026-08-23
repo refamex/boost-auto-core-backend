@@ -44,6 +44,7 @@ export class OrderService {
     private readonly releaseStock: ReleaseStockUseCase,
     @Inject(INVENTORY_REPOSITORY)
     private readonly inventoryRepo: InventoryRepository,
+    private readonly events: EventEmitter2,
   ) {}
 
   /**
@@ -85,8 +86,15 @@ export class OrderService {
     return found;
   }
 
-  async create(dto: CreateOrderDto): Promise<OrderEntity> {
-    return this.dataSource.transaction(async (tx) => {
+  /**
+   * `actor` is used only to default the contact email from the JWT claim. It
+   * stays optional so in-process callers can keep supplying contact via DTO.
+   */
+  async create(
+    dto: CreateOrderDto,
+    actor?: AuthenticatedUser,
+  ): Promise<OrderEntity> {
+    const created = await this.dataSource.transaction(async (tx) => {
       const products = await this.loadProducts(
         dto.items.map((i) => i.productId),
       );
