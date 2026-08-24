@@ -9,12 +9,14 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { AppConfig } from '../../../../shared/config/configuration';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { ShipmentTrackingEventEntity } from '../../domain/entities/shipment-tracking-event.entity';
 import { ShipmentEntity } from '../../domain/entities/shipment.entity';
+import { buildOrderWhere } from '../../domain/shipping-visibility';
 import { SKYDROPX_CLIENT, SkydropxClient } from '../ports/skydropx.client';
 
 const CANCELLABLE_STATUSES = ['created', 'pending', 'label_generated', 'ready'];
@@ -57,7 +59,6 @@ export class ShipmentService {
     this.events.emit(eventKey, payload);
   }
 
-
   private assertEnabled(): void {
     if (!this.config.get('skydropx.enabled', { infer: true })) {
       throw new ServiceUnavailableException(
@@ -71,10 +72,15 @@ export class ShipmentService {
     orderId: string,
     quotationId: string,
     rateId: string,
+    user: AuthenticatedUser,
   ): Promise<ShipmentEntity> {
     this.assertEnabled();
 
-    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    // Scoped BEFORE the Skydropx call: buying a real label against somebody
+    // else's order costs money and cannot be undone by a 404 afterwards.
+    const order = await this.orderRepo.findOne({
+      where: buildOrderWhere(user, orderId),
+    });
     if (!order) throw new NotFoundException(`Order ${orderId} not found`);
 
     const existing = await this.shipmentRepo.findOne({
@@ -82,7 +88,9 @@ export class ShipmentService {
       order: { createdAt: 'DESC' },
     });
     if (existing && existing.status !== 'cancelled') {
-      throw new ConflictException('An active shipment already exists for this order');
+      throw new ConflictException(
+        'An active shipment already exists for this order',
+      );
     }
 
     const result = await this.skydropx.createShipment({ quotationId, rateId });
@@ -119,12 +127,14 @@ export class ShipmentService {
   async cancel(shipmentId: string): Promise<ShipmentEntity> {
     this.assertEnabled();
 
-    const shipment = await this.findById(shipmentId);
+    const shipment = await this.loadForWrite(shipmentId);
     if (shipment.status === 'cancelled') {
       throw new ConflictException('Shipment is already cancelled');
     }
     if (!CANCELLABLE_STATUSES.includes(shipment.status)) {
-      throw new ConflictException(`Shipment in status '${shipment.status}' cannot be cancelled`);
+      throw new ConflictException(
+        `Shipment in status '${shipment.status}' cannot be cancelled`,
+      );
     }
 
     await this.skydropx.cancelShipment(shipment.skydropxShipmentId);
@@ -132,7 +142,9 @@ export class ShipmentService {
     shipment.status = 'cancelled';
     await this.shipmentRepo.save(shipment);
 
-    const order = await this.orderRepo.findOne({ where: { id: shipment.orderId } });
+    const order = await this.orderRepo.findOne({
+      where: { id: shipment.orderId },
+    });
     if (order) {
       order.shippingStatus = 'cancelled';
       await this.orderRepo.save(order);
@@ -142,8 +154,11 @@ export class ShipmentService {
   }
 
   /** Consulta tracking on-demand contra Skydropx y persiste eventos nuevos. */
-  async getTracking(shipmentId: string): Promise<ShipmentEntity> {
-    const shipment = await this.findById(shipmentId);
+  async getTracking(
+    shipmentId: string,
+    user: AuthenticatedUser,
+  ): Promise<ShipmentEntity> {
+    const shipment = await this.loadVisible(shipmentId, user);
     if (!shipment.trackingNumber || !shipment.carrierName) {
       return shipment;
     }
@@ -179,25 +194,57 @@ export class ShipmentService {
       }
     }
 
-    return this.findById(shipmentId);
+    return this.loadVisible(shipmentId, user);
   }
 
-  async findById(id: string): Promise<ShipmentEntity> {
-    const found = await this.shipmentRepo.findOne({
-      where: { id },
-      relations: ['trackingEvents'],
+  async findByOrder(
+    orderId: string,
+    user: AuthenticatedUser,
+  ): Promise<ShipmentEntity> {
+    // A NEW query, not a tightening of an existing one: shipments carry no
+    // ownership column, so the order is the only thing that can be scoped.
+    const order = await this.orderRepo.findOne({
+      where: buildOrderWhere(user, orderId),
     });
-    if (!found) throw new NotFoundException(`Shipment ${id} not found`);
-    return found;
-  }
+    if (!order) throw new NotFoundException(`No shipment for order ${orderId}`);
 
-  async findByOrder(orderId: string): Promise<ShipmentEntity> {
     const found = await this.shipmentRepo.findOne({
       where: { orderId },
       order: { createdAt: 'DESC' },
       relations: ['trackingEvents'],
     });
     if (!found) throw new NotFoundException(`No shipment for order ${orderId}`);
+    return found;
+  }
+
+  /**
+   * Read access: resolves the shipment, then confirms the caller may see its
+   * OWNING ORDER. Both failures raise the identical not-found message — a
+   * distinguishable error would confirm that a foreign shipment exists.
+   */
+  private async loadVisible(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<ShipmentEntity> {
+    const shipment = await this.loadForWrite(id);
+    const order = await this.orderRepo.findOne({
+      where: buildOrderWhere(user, shipment.orderId),
+    });
+    if (!order) throw new NotFoundException(`Shipment ${id} not found`);
+    return shipment;
+  }
+
+  /**
+   * Write access: unscoped, today's pre-existing behavior for the staff
+   * routes behind `@Roles('shipping:write')`. Ownership-based write
+   * authorization is deliberately out of scope, as it is for orders (D2).
+   */
+  private async loadForWrite(id: string): Promise<ShipmentEntity> {
+    const found = await this.shipmentRepo.findOne({
+      where: { id },
+      relations: ['trackingEvents'],
+    });
+    if (!found) throw new NotFoundException(`Shipment ${id} not found`);
     return found;
   }
 }
