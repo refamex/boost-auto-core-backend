@@ -1,5 +1,5 @@
 import { AuthenticatedUser } from '../../../shared/auth/jwt-payload.interface';
-import { buildWhere } from './order-visibility';
+import { bindCreate, buildWhere, tierOf } from './order-visibility';
 
 const admin: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
 const rep: AuthenticatedUser = {
@@ -66,5 +66,71 @@ describe('buildWhere', () => {
     it('is left unset when not requested', () => {
       expect(buildWhere(admin, {})!.status).toBeUndefined();
     });
+  });
+});
+
+describe('tierOf', () => {
+  it('classifies an admin caller as admin', () => {
+    expect(tierOf(admin)).toBe('admin');
+  });
+
+  it('classifies a caller with a salesRepId as rep', () => {
+    expect(tierOf(rep)).toBe('rep');
+  });
+
+  it('classifies a caller with neither admin nor a salesRepId as customer', () => {
+    expect(tierOf(customer)).toBe('customer');
+  });
+
+  it('fails closed: a role-less caller with no salesRepId is classified customer, not staff', () => {
+    const roleless: AuthenticatedUser = { id: 'no-roles-user', roles: [] };
+    expect(tierOf(roleless)).toBe('customer');
+  });
+
+  it('admin beats rep when the caller holds both', () => {
+    const both: AuthenticatedUser = {
+      id: 'u',
+      roles: ['admin'],
+      salesRepId: 'rep-1',
+    };
+    expect(tierOf(both)).toBe('admin');
+  });
+});
+
+describe('bindCreate', () => {
+  it('lets an admin caller keep explicit control of customerId and status', () => {
+    const bound = bindCreate(admin, {
+      customerId: 'someone-else',
+      status: 'confirmed',
+    });
+    expect(bound).toEqual({ customerId: 'someone-else', status: 'confirmed' });
+  });
+
+  it('lets a rep caller keep explicit control of customerId and status', () => {
+    const bound = bindCreate(rep, {
+      customerId: 'someone-else',
+      status: 'confirmed',
+    });
+    expect(bound).toEqual({ customerId: 'someone-else', status: 'confirmed' });
+  });
+
+  it('defaults staff status to draft when omitted', () => {
+    expect(bindCreate(admin, { customerId: 'someone-else' })!.status).toBe(
+      'draft',
+    );
+  });
+
+  it('binds a customer to their own id and forces draft, ignoring dto.status (F8)', () => {
+    const bound = bindCreate(customer, {
+      customerId: 'customer-1',
+      status: 'confirmed',
+    });
+    expect(bound).toEqual({ customerId: 'customer-1', status: 'draft' });
+  });
+
+  it('rejects a customer supplying a mismatching customerId (F10)', () => {
+    expect(
+      bindCreate(customer, { customerId: 'customer-2', status: 'confirmed' }),
+    ).toBeNull();
   });
 });

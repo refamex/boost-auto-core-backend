@@ -269,7 +269,7 @@ export class QuoteService {
       );
     }
 
-    const order = await this.orders.create(payload);
+    const order = await this.orders.createInternal(payload);
     await this.quoteRepo.update({ id }, { convertedOrderId: order.id });
 
     const full = await this.quoteRepo.findOne({

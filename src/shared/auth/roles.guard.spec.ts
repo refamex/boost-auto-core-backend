@@ -1,6 +1,8 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { OrderController } from '../../modules/orders/infrastructure/http/order.controller';
 import { AuthenticatedUser } from './jwt-payload.interface';
+import { ROLE_PERMISSIONS, expand } from './role-permissions';
 import { RolesGuard } from './roles.guard';
 
 const makeReflector = (required: string[] | undefined): Reflector =>
@@ -55,4 +57,70 @@ describe('RolesGuard — role expansion, then `some` (D1, D4/D7)', () => {
 
     expect(guard.canActivate(makeCtx(rep))).toBe(true);
   });
+});
+
+describe('role-permissions map — customer row and admin growth (F6, F11)', () => {
+  it('customer expands to exactly orders:create and shipping:read', () => {
+    expect(ROLE_PERMISSIONS.customer).toEqual(['orders:create', 'shipping:read']);
+  });
+
+  it('admin is 24 strings, including billing:admin and orders:create', () => {
+    expect(ROLE_PERMISSIONS.admin).toHaveLength(24);
+    expect(ROLE_PERMISSIONS.admin).toEqual(
+      expect.arrayContaining(['billing:admin', 'orders:create']),
+    );
+  });
+
+  it('customer is NOT granted orders:write, shipping:write, billing:write, or billing:admin', () => {
+    const granted = expand(['customer']);
+    expect(granted.has('orders:write')).toBe(false);
+    expect(granted.has('shipping:write')).toBe(false);
+    expect(granted.has('billing:write')).toBe(false);
+    expect(granted.has('billing:admin')).toBe(false);
+  });
+});
+
+describe('OrderController route gates — Defect A regression (F11)', () => {
+  const realReflector = new Reflector();
+  const customerActor: AuthenticatedUser = { id: 'cust-1', roles: ['customer'] };
+
+  const ctxForController = (
+    method: (...args: never[]) => unknown,
+    user: AuthenticatedUser,
+  ): ExecutionContext =>
+    ({
+      getHandler: () => method,
+      getClass: () => OrderController,
+      switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    }) as unknown as ExecutionContext;
+
+  // These pull the actual controller method references so the test breaks
+  // if a future edit changes the real `@Roles(...)` metadata — never called
+  // with a `this` context, only handed to `Reflect.getMetadata` via
+  // `ctx.getHandler()`, exactly like NestJS's real `RolesGuard` does.
+  /* eslint-disable @typescript-eslint/unbound-method */
+  it('POST /v1/orders is reachable by a customer-role token', () => {
+    const guard = new RolesGuard(realReflector);
+
+    expect(
+      guard.canActivate(ctxForController(OrderController.prototype.create, customerActor)),
+    ).toBe(true);
+  });
+
+  it.each([
+    ['update', OrderController.prototype.update],
+    ['confirm', OrderController.prototype.confirm],
+    ['prepare', OrderController.prototype.prepare],
+    ['cancel', OrderController.prototype.cancel],
+    ['addPayment', OrderController.prototype.addPayment],
+  ] as const)(
+    '%s stays closed to a customer-role token (orders:write only) — no widening beyond create',
+    (_name, method) => {
+      const guard = new RolesGuard(realReflector);
+
+      expect(() =>
+        guard.canActivate(ctxForController(method, customerActor)),
+      ).toThrow(ForbiddenException);
+    },
+  );
 });
