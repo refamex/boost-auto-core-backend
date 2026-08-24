@@ -8,7 +8,10 @@ import { NotificationService } from './application/services/notification.service
 import { OutboxDrainerService } from './application/services/outbox-drainer.service';
 import { NotificationOutboxEntity } from './domain/entities/notification-outbox.entity';
 import { NotificationEntity } from './domain/entities/notification.entity';
-import { ConsoleEmailChannel } from './infrastructure/channels/console-email.channel';
+import { ConfigService } from '@nestjs/config';
+import { AppConfig } from '../../shared/config/configuration';
+import { NotificationChannel } from './application/ports/notification-channel';
+import { createEmailChannel } from './infrastructure/channels/email-channel.factory';
 import { InAppChannel } from './infrastructure/channels/inapp.channel';
 import { NotificationController } from './infrastructure/http/notification.controller';
 import { OutboxScheduler } from './infrastructure/scheduler/outbox.scheduler';
@@ -20,6 +23,8 @@ import { OutboxScheduler } from './infrastructure/scheduler/outbox.scheduler';
  * listens. Adding a trigger is a matter of emitting an event from wherever the
  * state actually changes, which for payment and shipping is not OrderService.
  */
+export const EMAIL_CHANNEL = Symbol('EMAIL_CHANNEL');
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([NotificationEntity, NotificationOutboxEntity]),
@@ -30,15 +35,23 @@ import { OutboxScheduler } from './infrastructure/scheduler/outbox.scheduler';
     OutboxDrainerService,
     OutboxScheduler,
     InAppChannel,
-    ConsoleEmailChannel,
+    {
+      // Console adapter when unconfigured, real provider when credentialed.
+      // `createEmailChannel` owns that rule and refuses to degrade silently
+      // in production.
+      provide: EMAIL_CHANNEL,
+      useFactory: (config: ConfigService<AppConfig, true>) =>
+        createEmailChannel(config),
+      inject: [ConfigService],
+    },
     { provide: SYNC_LOCK, useClass: PostgresSyncLock },
     {
       provide: NOTIFICATION_CHANNELS,
-      useFactory: (inapp: InAppChannel, email: ConsoleEmailChannel) => [
+      useFactory: (inapp: InAppChannel, email: NotificationChannel) => [
         inapp,
         email,
       ],
-      inject: [InAppChannel, ConsoleEmailChannel],
+      inject: [InAppChannel, EMAIL_CHANNEL],
     },
   ],
   controllers: [NotificationController],

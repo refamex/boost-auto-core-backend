@@ -26,7 +26,6 @@
     "migration:revert": "pnpm typeorm migration:revert",
     "migration:show": "pnpm typeorm migration:show",
     "db:reset": "pnpm typeorm schema:drop && pnpm migration:run"
-    
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -51,6 +50,7 @@
     "passport-jwt": "^4.0.1",
     "pg": "^8.13.1",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.22.1",
     "rxjs": "^7.8.1",
     "sax": "^1.6.1",
     "typeorm": "^0.3.20"
