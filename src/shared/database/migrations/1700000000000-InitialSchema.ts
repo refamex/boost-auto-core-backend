@@ -566,14 +566,14 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       `CREATE INDEX idx_pxref_product_id        ON pim.product_cross_references(product_id)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_pxref_reference_sku     ON pim.product_cross_references(reference_sku)`,
+      `CREATE INDEX idx_pxref_reference_id      ON pim.product_cross_references(reference_id)`,
     );
 
     await queryRunner.query(
       `CREATE INDEX idx_model_car_code_model    ON vehicles.model_car(code_model)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_model_car_code_plant    ON vehicles.model_car(code_assembly_plant)`,
+      `CREATE INDEX idx_model_car_plant_id      ON vehicles.model_car(assembly_plant_id)`,
     );
     await queryRunner.query(
       `CREATE INDEX idx_model_car_created_at    ON vehicles.model_car(created_at)`,
@@ -582,35 +582,20 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       `CREATE INDEX idx_motorization_car_code   ON vehicles.motorization_car(code)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_mcm_motorization_code   ON vehicles.model_car_motorization(motorization_code)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_mcm_model_car_code      ON vehicles.model_car_motorization(model_car_code)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_mcm_composite           ON vehicles.model_car_motorization(motorization_code, model_car_code)`,
+      `CREATE INDEX idx_mcm_motorization_model  ON vehicles.model_car_motorization(motorization_id, model_car_id)`,
     );
 
     await queryRunner.query(
-      `CREATE INDEX idx_compat_sku               ON compatibility.compatibilities(sku)`,
+      `CREATE INDEX idx_compat_vehicle_lookup   ON compatibility.compatibilities(model_id, year_id, assembly_plant_id, motorization_id) INCLUDE (product_id)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_compat_model_code        ON compatibility.compatibilities(model_code)`,
+      `CREATE INDEX idx_compat_year_id          ON compatibility.compatibilities(year_id)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_compat_year_code         ON compatibility.compatibilities(year_code)`,
+      `CREATE INDEX idx_compat_plant_id         ON compatibility.compatibilities(assembly_plant_id)`,
     );
     await queryRunner.query(
-      `CREATE INDEX idx_compat_plant_code        ON compatibility.compatibilities(assembly_plant_code)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_compat_motorization_code ON compatibility.compatibilities(motorization_code)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_compat_model_year        ON compatibility.compatibilities(model_code, year_code)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_compat_sku_filters_code  ON compatibility.compatibilities(sku, model_code, year_code, assembly_plant_code, motorization_code) INCLUDE (id)`,
+      `CREATE INDEX idx_compat_motorization_id  ON compatibility.compatibilities(motorization_id)`,
     );
 
     await queryRunner.query(
