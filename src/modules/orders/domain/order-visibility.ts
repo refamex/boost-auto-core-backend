@@ -18,13 +18,27 @@ export interface OrderVisibilityQuery {
   status?: string;
 }
 
+export type OrderActorTier = 'admin' | 'rep' | 'customer';
+
 /**
- * Reader tiers, most privileged first:
+ * The single definition of caller tier, shared by `buildWhere` (read scope)
+ * and `bindCreate` (create-time ownership binding) so the two can never
+ * diverge:
  *
- *   `orders:admin` (via macro `admin`) -> every order
- *   caller with a `salesRepId` claim    -> own portfolio (`salesRepId`)
- *   anyone else                          -> orders they placed (`customerId`)
+ *   `orders:admin` (via macro `admin`) -> admin
+ *   caller with a `salesRepId` claim    -> rep
+ *   anyone else                          -> customer
  *
+ * Fails CLOSED: anything not provably admin-or-rep is bound to its own id.
+ * `user.roles.includes('customer')` is deliberately NOT used here — it
+ * would fail OPEN, classifying a role-less token as staff.
+ */
+export function tierOf(user: AuthenticatedUser): OrderActorTier {
+  if (expand(user.roles).has('orders:admin')) return 'admin';
+  return user.salesRepId ? 'rep' : 'customer';
+}
+
+/**
  * Returns `null` when the requested filter can never match anything the
  * caller is allowed to see — the caller gets an empty page, not a 403,
  * because refusing would confirm that matching orders exist.
@@ -33,8 +47,9 @@ export function buildWhere(
   user: AuthenticatedUser,
   query: OrderVisibilityQuery,
 ): FindOptionsWhere<OrderEntity> | null {
-  const isAdmin = expand(user.roles).has('orders:admin');
-  const isRep = !isAdmin && Boolean(user.salesRepId);
+  const tier = tierOf(user);
+  const isAdmin = tier === 'admin';
+  const isRep = tier === 'rep';
 
   const where: FindOptionsWhere<OrderEntity> = {};
   if (isRep) {
@@ -54,4 +69,27 @@ export function buildWhere(
   if (query.status) where.status = query.status;
 
   return where;
+}
+
+/** The ownership + status pair a create call is allowed to persist. */
+export interface OrderCreateBinding {
+  customerId: string;
+  status: string;
+}
+
+/**
+ * `null` = the caller asserted an identity that is not theirs. The SERVICE
+ * maps it to 403 (F10) — unlike the read path above, which maps `null` to
+ * 404/empty page. Stays pure on purpose: no file under
+ * `src/modules/**\/domain/**` imports `@nestjs/common`.
+ */
+export function bindCreate(
+  user: AuthenticatedUser,
+  dto: { customerId: string; status?: string },
+): OrderCreateBinding | null {
+  if (tierOf(user) !== 'customer') {
+    return { customerId: dto.customerId, status: dto.status ?? 'draft' }; // staff keep both
+  }
+  if (dto.customerId !== user.id) return null; // F10 -> 403
+  return { customerId: user.id, status: 'draft' }; // F8 — dto.status ignored
 }
