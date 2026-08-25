@@ -335,7 +335,6 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       CREATE TABLE inventory.inventory (
         id                 SERIAL PRIMARY KEY,
         product_id         INTEGER NOT NULL REFERENCES pim.product(id) ON DELETE RESTRICT,
-        provider_sku       TEXT    NOT NULL,
         provider_branch_id BIGINT  NOT NULL REFERENCES suppliers.provider_branch(id),
         stock              INTEGER NOT NULL DEFAULT 0,
         reserved_stock     INTEGER          DEFAULT 0,
@@ -616,9 +615,6 @@ export class InitialSchema1700000000000 implements MigrationInterface {
 
     await queryRunner.query(
       `CREATE INDEX idx_inventory_product_id         ON inventory.inventory(product_id)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_inventory_provider_sku       ON inventory.inventory(provider_sku)`,
     );
     await queryRunner.query(
       `CREATE INDEX idx_inventory_product_branch     ON inventory.inventory(product_id, provider_branch_id)`,

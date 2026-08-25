@@ -26,9 +26,6 @@ export class InventoryEntity {
   @JoinColumn({ name: 'product_id' })
   product?: ProductEntity;
 
-  @Column({ type: 'text', name: 'provider_sku' })
-  providerSku!: string;
-
   @Column({
     type: 'bigint',
     name: 'provider_branch_id',

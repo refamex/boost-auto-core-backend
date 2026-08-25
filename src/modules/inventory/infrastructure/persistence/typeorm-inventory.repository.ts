@@ -18,7 +18,7 @@ import { Inventory } from '../../domain/inventory.aggregate';
 import { InventoryNotFoundError } from '../../domain/errors';
 import { InventoryEntity } from '../../domain/entities/inventory.entity';
 
-/** 4 bind parameters per row; Postgres caps a statement at 65535. */
+/** 3 bind parameters per row; Postgres caps a statement at 65535. */
 const BULK_CHUNK_SIZE = 1000;
 
 interface UpsertReturningRow {
@@ -60,7 +60,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     return {
       id: r.id,
       productSku: r.product!.sku,
-      providerSku: r.providerSku,
+      providerSku: r.product?.providerSku ?? '',
       providerBranchId: r.providerBranchId,
       stock: r.stock,
       reservedStock: r.reservedStock,
@@ -99,13 +99,16 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
       const row = await this.dataSource.getRepository(InventoryEntity).save(
         this.dataSource.getRepository(InventoryEntity).create({
           productId,
-          providerSku: input.providerSku,
           providerBranchId: input.providerBranchId,
           stock: input.stock ?? 0,
           reservedStock: input.reservedStock ?? 0,
         }),
       );
-      row.product = { id: productId, sku: input.productSku } as never;
+      row.product = {
+        id: productId,
+        sku: input.productSku,
+        providerSku: input.providerSku,
+      } as never;
       return this.toListItem(row);
     } catch (e) {
       if (
@@ -164,7 +167,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
       const aggregate = Inventory.fromSnapshot({
         id: row.id,
         productSku: row.product!.sku,
-        providerSku: row.providerSku,
+        providerSku: row.product?.providerSku ?? '',
         providerBranchId: row.providerBranchId,
         stock: row.stock,
         reservedStock: row.reservedStock,
@@ -263,27 +266,21 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
   ): Promise<UpsertReturningRow[]> {
     const params: unknown[] = [];
     const tuples = chunk.map((row, index) => {
-      const base = index * 4;
-      params.push(
-        row.productSku,
-        row.providerSku,
-        row.providerBranchId,
-        row.stock,
-      );
-      return `($${base + 1}::text, $${base + 2}::text, $${base + 3}::bigint, $${base + 4}::integer)`;
+      const base = index * 3;
+      params.push(row.productSku, row.providerBranchId, row.stock);
+      return `($${base + 1}::text, $${base + 2}::bigint, $${base + 3}::integer)`;
     });
 
     // GREATEST keeps the aggregate invariant (reserved_stock <= stock) true even
     // when the supplier reports fewer units than we have already reserved.
     // COALESCE because reserved_stock is nullable in the schema.
     return tx.query(
-      `INSERT INTO inventory.inventory AS inv (product_id, provider_sku, provider_branch_id, stock)
-       SELECT product.id, source.provider_sku, source.provider_branch_id, source.stock
-       FROM (VALUES ${tuples.join(', ')}) AS source(sku, provider_sku, provider_branch_id, stock)
+      `INSERT INTO inventory.inventory AS inv (product_id, provider_branch_id, stock)
+       SELECT product.id, source.provider_branch_id, source.stock
+       FROM (VALUES ${tuples.join(', ')}) AS source(sku, provider_branch_id, stock)
        JOIN pim.product AS product ON product.sku = source.sku
        ON CONFLICT (product_id, provider_branch_id) DO UPDATE
-         SET stock = GREATEST(EXCLUDED.stock, COALESCE(inv.reserved_stock, 0)),
-             provider_sku = EXCLUDED.provider_sku
+         SET stock = GREATEST(EXCLUDED.stock, COALESCE(inv.reserved_stock, 0))
        RETURNING product_id, provider_branch_id, stock, reserved_stock`,
       params,
     );
