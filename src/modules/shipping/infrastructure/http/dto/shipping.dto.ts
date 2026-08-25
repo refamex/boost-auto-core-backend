@@ -22,10 +22,22 @@ class QuoteAddressDto {
 }
 
 class QuoteParcelDto {
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @IsPositive() weight?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @IsPositive() length?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  weight?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  length?: number;
   @ApiPropertyOptional() @IsOptional() @IsNumber() @IsPositive() width?: number;
-  @ApiPropertyOptional() @IsOptional() @IsNumber() @IsPositive() height?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @IsPositive()
+  height?: number;
 }
 
 /**

@@ -258,14 +258,18 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
     ]);
   }
 
-  async down(): Promise<void> {
+  down(): Promise<void> {
     throw new Error(
       'ForeignKeysById is intentionally irreversible after code-based columns are removed',
     );
   }
 
   private async migrateReference(q: QueryRunner, r: Ref): Promise<void> {
-    const [state] = await q.query(
+    const state = await this.selectOne<{
+      old_exists: boolean;
+      new_exists: boolean;
+    }>(
+      q,
       `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 AND column_name=$3) AS old_exists,
               EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=$1 AND table_name=$2 AND column_name=$4) AS new_exists`,
       [r.schema, r.table, r.oldColumn, r.newColumn],
@@ -278,7 +282,8 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
       await q.query(
         `UPDATE "${r.schema}"."${r.table}" src SET "${r.newColumn}"=target.id FROM "${r.targetSchema}"."${r.targetTable}" target WHERE src."${r.newColumn}" IS NULL AND src."${r.oldColumn}"=target."${r.lookupColumn}"`,
       );
-      const [orphans] = await q.query(
+      const orphans = await this.selectOne<{ count: number }>(
+        q,
         `SELECT COUNT(*)::int AS count FROM "${r.schema}"."${r.table}" WHERE "${r.oldColumn}" IS NOT NULL AND "${r.newColumn}" IS NULL`,
       );
       if (Number(orphans.count) > 0)
@@ -290,7 +295,8 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
       );
     }
     if (!r.nullable) {
-      const [nulls] = await q.query(
+      const nulls = await this.selectOne<{ count: number }>(
+        q,
         `SELECT COUNT(*)::int AS count FROM "${r.schema}"."${r.table}" WHERE "${r.newColumn}" IS NULL`,
       );
       if (Number(nulls.count) > 0)
@@ -302,7 +308,8 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
       );
     }
     const constraint = `fk_${r.table}_${r.newColumn}`;
-    const [exists] = await q.query(
+    const exists = await this.selectOne<{ value: boolean }>(
+      q,
       'SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname=$1) AS value',
       [constraint],
     );
@@ -312,6 +319,21 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
       );
   }
 
+  /**
+   * `QueryRunner.query` is declared `Promise<any>`, so every read from a result
+   * row is unchecked. Naming the row shape at each call site turns a typo in a
+   * column alias into a compile error instead of a silent `undefined` — which
+   * matters here, because these reads gate whether a column gets dropped.
+   */
+  private async selectOne<T>(
+    q: QueryRunner,
+    sql: string,
+    parameters?: unknown[],
+  ): Promise<T> {
+    const rows = (await q.query(sql, parameters)) as T[];
+    return rows[0];
+  }
+
   private async replaceUnique(
     q: QueryRunner,
     schema: string,
@@ -319,7 +341,8 @@ export class ForeignKeysById1787616000000 implements MigrationInterface {
     columns: string[],
   ): Promise<void> {
     const name = `uq_${table}_${columns.join('_')}`;
-    const [exists] = await q.query(
+    const exists = await this.selectOne<{ value: boolean }>(
+      q,
       'SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname=$1) AS value',
       [name],
     );

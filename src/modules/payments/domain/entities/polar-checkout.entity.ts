@@ -34,7 +34,12 @@ export class PolarCheckoutEntity {
   @Column({ type: 'text', name: 'checkout_url' })
   checkoutUrl!: string;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    transformer: numericTransformer,
+  })
   amount!: number;
 
   @Column({ type: 'varchar', length: 10, default: 'MXN' })

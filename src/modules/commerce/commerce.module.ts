@@ -11,7 +11,11 @@ import { PriceListController } from './infrastructure/http/price-list.controller
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([PriceListEntity, PriceListItemEntity, PaymentMethodEntity]),
+    TypeOrmModule.forFeature([
+      PriceListEntity,
+      PriceListItemEntity,
+      PaymentMethodEntity,
+    ]),
   ],
   providers: [PriceListService, PriceListItemService, PaymentMethodService],
   controllers: [PriceListController, PaymentMethodController],

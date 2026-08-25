@@ -1,27 +1,18 @@
-import { execSync } from 'node:child_process';
 import {
   PostgreSqlContainer,
   StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import { DataSource } from 'typeorm';
+import { AddCustomersSchema1779738126227 } from '../src/shared/database/migrations/1779738126227-AddCustomersSchema';
+import { describeWithDocker } from './docker-gate';
 
 /**
  * Exercises the `customers` schema's DB-level invariants against a real
  * Postgres. Mocked-repository unit tests cannot prove a partial unique
  * index, a concurrent-write race, `ON DELETE CASCADE`, or a trigger — those
- * are only provable here. Skips itself when Docker is unavailable.
+ * are only provable here. Skips locally without Docker; under CI it fails
+ * instead (see `docker-gate`).
  */
-
-const hasDocker = (): boolean => {
-  try {
-    execSync('docker info', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const describeWithDocker = hasDocker() ? describe : describe.skip;
 
 describeWithDocker('customers schema constraints', () => {
   jest.setTimeout(240_000);
@@ -208,14 +199,30 @@ describeWithDocker('customers schema constraints', () => {
     );
   });
 
+  // Drives THIS migration by identity rather than `undoLastMigration()`, which
+  // reverts whichever migration is last by timestamp. That was the customers
+  // one when this test was written; appending any migration since silently
+  // retargeted it, and the assertion below started passing against a schema
+  // that had never been dropped. Position is not identity.
+  //
+  // Reverting the chain is also no longer an option at all: `ForeignKeysById`
+  // declares itself irreversible once the code-based columns are gone, so the
+  // runner can never walk back past it to reach this migration.
   it('migration up -> down -> up is clean', async () => {
-    await dataSource.undoLastMigration();
+    const migration = new AddCustomersSchema1779738126227();
+    const runner = dataSource.createQueryRunner();
 
-    await expect(
-      dataSource.query('SELECT 1 FROM customers.customer_profile LIMIT 1'),
-    ).rejects.toThrow();
+    try {
+      await migration.down(runner);
 
-    await dataSource.runMigrations();
+      await expect(
+        dataSource.query('SELECT 1 FROM customers.customer_profile LIMIT 1'),
+      ).rejects.toThrow();
+
+      await migration.up(runner);
+    } finally {
+      await runner.release();
+    }
 
     const rows = await dataSource.query<{ id: string }[]>(
       `INSERT INTO customers.customer_profile (display_name) VALUES ('Post-cycle') RETURNING id`,

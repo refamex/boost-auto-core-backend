@@ -65,11 +65,17 @@ export class ShippingWebhookService {
         this.webhookRepo.create({
           skydropxEventId: eventId,
           eventType: event.type,
-          payloadJson: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+          payloadJson: JSON.parse(JSON.stringify(event)) as Record<
+            string,
+            unknown
+          >,
         }),
       );
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         this.logger.debug(`Duplicate shipping webhook ${eventId}, skipping`);
         return;
       }
@@ -78,14 +84,19 @@ export class ShippingWebhookService {
 
     try {
       await this.applyTracking(event);
-      await this.webhookRepo.update({ skydropxEventId: eventId }, { processedAt: new Date() });
+      await this.webhookRepo.update(
+        { skydropxEventId: eventId },
+        { processedAt: new Date() },
+      );
     } catch (err) {
       this.logger.error(`Failed processing ${eventId}`, err);
       throw err;
     }
   }
 
-  private async findShipment(event: SkydropxWebhookPayload): Promise<ShipmentEntity | null> {
+  private async findShipment(
+    event: SkydropxWebhookPayload,
+  ): Promise<ShipmentEntity | null> {
     const skydropxId = event.data.shipment_id ?? event.data.id;
     if (skydropxId) {
       const byId = await this.shipmentRepo.findOne({
@@ -104,7 +115,9 @@ export class ShippingWebhookService {
   private async applyTracking(event: SkydropxWebhookPayload): Promise<void> {
     const shipment = await this.findShipment(event);
     if (!shipment) {
-      this.logger.warn(`Webhook ${event.type}: shipment not found for ${JSON.stringify(event.data)}`);
+      this.logger.warn(
+        `Webhook ${event.type}: shipment not found for ${JSON.stringify(event.data)}`,
+      );
       return;
     }
 
@@ -115,7 +128,9 @@ export class ShippingWebhookService {
 
       const orderStatus = ORDER_STATUS_MAP[status];
       if (orderStatus) {
-        const order = await this.orderRepo.findOne({ where: { id: shipment.orderId } });
+        const order = await this.orderRepo.findOne({
+          where: { id: shipment.orderId },
+        });
         if (order) {
           order.shippingStatus = orderStatus;
           await this.orderRepo.save(order);
@@ -146,7 +161,9 @@ export class ShippingWebhookService {
         shipmentId: shipment.id,
         status: status ?? 'unknown',
         description: event.data.description ?? null,
-        occurredAt: event.data.occurred_at ? new Date(event.data.occurred_at) : new Date(),
+        occurredAt: event.data.occurred_at
+          ? new Date(event.data.occurred_at)
+          : new Date(),
         rawJson: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
       }),
     );

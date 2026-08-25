@@ -73,5 +73,8 @@ export interface SkydropxClient {
   quote(input: QuoteInput): Promise<QuoteResult>;
   createShipment(input: CreateShipmentInput): Promise<ShipmentResult>;
   cancelShipment(skydropxShipmentId: string): Promise<void>;
-  getTracking(trackingNumber: string, carrierName: string): Promise<TrackingResult>;
+  getTracking(
+    trackingNumber: string,
+    carrierName: string,
+  ): Promise<TrackingResult>;
 }

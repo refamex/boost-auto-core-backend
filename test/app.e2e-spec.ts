@@ -21,12 +21,16 @@ describe('App (e2e)', () => {
     await app.close();
   });
 
-  it('GET /health responds 200 with status=ok', () => {
+  // `/v1/health`, not `/health`: URI versioning is enabled above and in
+  // `main.ts`, so every route carries the version segment. Asking for the
+  // unversioned path returned 404 and the suite had been failing on it.
+  it('GET /v1/health responds 200 with status=ok', () => {
     return request(app.getHttpServer())
-      .get('/health')
+      .get('/v1/health')
       .expect(200)
       .expect((res) => {
-        expect(res.body.status).toBe('ok');
+        const body = res.body as { status: string };
+        expect(body.status).toBe('ok');
       });
   });
 });

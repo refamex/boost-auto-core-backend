@@ -32,7 +32,14 @@ export class Inventory {
   }
 
   static fromSnapshot(s: InventorySnapshot): Inventory {
-    return new Inventory(s.id, s.productSku, s.providerSku, s.providerBranchId, s.stock, s.reservedStock);
+    return new Inventory(
+      s.id,
+      s.productSku,
+      s.providerSku,
+      s.providerBranchId,
+      s.stock,
+      s.reservedStock,
+    );
   }
 
   get stock(): number {
@@ -110,13 +117,17 @@ export class Inventory {
 
   private assertPositive(qty: number, op: string): void {
     if (!Number.isInteger(qty) || qty <= 0) {
-      throw new InvalidStockOperationError(`${op} qty must be a positive integer`);
+      throw new InvalidStockOperationError(
+        `${op} qty must be a positive integer`,
+      );
     }
   }
 
   private assertInvariants(): void {
-    if (this._stock < 0) throw new InvalidStockOperationError('stock must be >= 0');
-    if (this._reservedStock < 0) throw new InvalidStockOperationError('reservedStock must be >= 0');
+    if (this._stock < 0)
+      throw new InvalidStockOperationError('stock must be >= 0');
+    if (this._reservedStock < 0)
+      throw new InvalidStockOperationError('reservedStock must be >= 0');
     if (this._reservedStock > this._stock) {
       throw new InvalidStockOperationError('reservedStock cannot exceed stock');
     }

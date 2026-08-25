@@ -10,7 +10,12 @@ import { OrderController } from './infrastructure/http/order.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OrderEntity, OrderItemEntity, OrderPaymentEntity, ProductEntity]),
+    TypeOrmModule.forFeature([
+      OrderEntity,
+      OrderItemEntity,
+      OrderPaymentEntity,
+      ProductEntity,
+    ]),
     InventoryModule,
   ],
   providers: [OrderService],

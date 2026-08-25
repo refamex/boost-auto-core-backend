@@ -152,7 +152,9 @@ export class CreateVolumeCategoryDto {
   length?: number;
 }
 
-export class UpdateVolumeCategoryDto extends PartialType(CreateVolumeCategoryDto) {}
+export class UpdateVolumeCategoryDto extends PartialType(
+  CreateVolumeCategoryDto,
+) {}
 
 // -------- BrandCategory --------
 export class CreateBrandCategoryDto {

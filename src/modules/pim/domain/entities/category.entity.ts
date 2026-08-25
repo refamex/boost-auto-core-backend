@@ -25,7 +25,9 @@ export class CategoryEntity {
   @Column({ type: 'integer', name: 'id_department' })
   idDepartment!: number;
 
-  @ManyToOne(() => CategoryDepartmentEntity, (d) => d.categories, { onDelete: 'RESTRICT' })
+  @ManyToOne(() => CategoryDepartmentEntity, (d) => d.categories, {
+    onDelete: 'RESTRICT',
+  })
   @JoinColumn({ name: 'id_department' })
   department!: CategoryDepartmentEntity;
 

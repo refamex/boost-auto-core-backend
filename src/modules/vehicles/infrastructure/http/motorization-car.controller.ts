@@ -11,7 +11,10 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { MotorizationCarService } from '../../application/services/motorization-car.service';
-import { CreateMotorizationCarDto, UpdateMotorizationCarDto } from './dto/vehicles.dto';
+import {
+  CreateMotorizationCarDto,
+  UpdateMotorizationCarDto,
+} from './dto/vehicles.dto';
 
 @ApiTags('vehicles — motorizations')
 @ApiBearerAuth()

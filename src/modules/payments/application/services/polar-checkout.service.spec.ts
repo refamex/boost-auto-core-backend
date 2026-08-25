@@ -18,8 +18,10 @@ describe('PolarCheckoutService', () => {
 
   const checkoutRepo = {
     findOne: jest.fn(),
-    save: jest.fn((x) => Promise.resolve({ id: 'local-uuid', ...x })),
-    create: jest.fn((x) => x),
+    save: jest.fn((x: Record<string, unknown>) =>
+      Promise.resolve({ id: 'local-uuid', ...x }),
+    ),
+    create: jest.fn((x: unknown) => x),
   };
 
   const orderRepo = {
@@ -51,7 +53,10 @@ describe('PolarCheckoutService', () => {
         PolarCheckoutService,
         { provide: ConfigService, useValue: config },
         { provide: POLAR_CLIENT, useValue: polarClient },
-        { provide: getRepositoryToken(PolarCheckoutEntity), useValue: checkoutRepo },
+        {
+          provide: getRepositoryToken(PolarCheckoutEntity),
+          useValue: checkoutRepo,
+        },
         { provide: getRepositoryToken(OrderEntity), useValue: orderRepo },
       ],
     }).compile();
@@ -68,6 +73,8 @@ describe('PolarCheckoutService', () => {
 
   it('throws 409 when open checkout exists', async () => {
     checkoutRepo.findOne.mockResolvedValue({ id: 'existing', status: 'open' });
-    await expect(service.createForOrder(order.id)).rejects.toThrow(ConflictException);
+    await expect(service.createForOrder(order.id)).rejects.toThrow(
+      ConflictException,
+    );
   });
 });

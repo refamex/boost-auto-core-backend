@@ -93,7 +93,7 @@ describe('ResendEmailChannel', () => {
     it('carries the notification body into the message', async () => {
       await makeChannel().send(makeNotification(), makeOutbox());
 
-      const payload = send.mock.calls[0][0] as { html: string };
+      const [[payload]] = send.mock.calls as Array<[{ html: string }]>;
       expect(payload.html).toContain('Tracking number TRACK123');
     });
 
@@ -200,7 +200,7 @@ describe('ResendEmailChannel', () => {
         makeOutbox(),
       );
 
-      const payload = send.mock.calls[0][0] as { html: string };
+      const [[payload]] = send.mock.calls as Array<[{ html: string }]>;
       expect(payload.html).not.toContain('<script>');
       expect(payload.html).toContain('&lt;script&gt;');
       expect(payload.html).toContain('&amp;');

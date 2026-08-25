@@ -21,7 +21,9 @@ export class CategoryComplementController {
 
   @Get()
   list(@Query('categoryIndexId') categoryIndexId?: string) {
-    return this.svc.list(categoryIndexId ? parseInt(categoryIndexId, 10) : undefined);
+    return this.svc.list(
+      categoryIndexId ? parseInt(categoryIndexId, 10) : undefined,
+    );
   }
 
   @Post()

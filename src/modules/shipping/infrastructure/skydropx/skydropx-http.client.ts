@@ -1,4 +1,8 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AppConfig } from '../../../../shared/config/configuration';
 import {
@@ -39,14 +43,21 @@ export class SkydropxHttpClient implements SkydropxClient {
   /** Obtiene un token OAuth2 client_credentials, cacheado en memoria. */
   private async getAccessToken(): Promise<string> {
     const now = Date.now();
-    if (this.cachedToken && this.cachedToken.expiresAt - TOKEN_REFRESH_MARGIN_MS > now) {
+    if (
+      this.cachedToken &&
+      this.cachedToken.expiresAt - TOKEN_REFRESH_MARGIN_MS > now
+    ) {
       return this.cachedToken.accessToken;
     }
 
     const clientId = this.config.get('skydropx.clientId', { infer: true });
-    const clientSecret = this.config.get('skydropx.clientSecret', { infer: true });
+    const clientSecret = this.config.get('skydropx.clientSecret', {
+      infer: true,
+    });
     if (!clientId || !clientSecret) {
-      throw new ServiceUnavailableException('Skydropx credentials not configured');
+      throw new ServiceUnavailableException(
+        'Skydropx credentials not configured',
+      );
     }
 
     const res = await fetch(`${this.baseUrl}/api/v1/oauth/token`, {
@@ -61,11 +72,18 @@ export class SkydropxHttpClient implements SkydropxClient {
 
     if (!res.ok) {
       const text = await res.text();
-      this.logger.error(`Skydropx token request failed (${res.status}): ${text}`);
-      throw new ServiceUnavailableException('Could not authenticate against Skydropx');
+      this.logger.error(
+        `Skydropx token request failed (${res.status}): ${text}`,
+      );
+      throw new ServiceUnavailableException(
+        'Could not authenticate against Skydropx',
+      );
     }
 
-    const json = (await res.json()) as { access_token: string; expires_in?: number };
+    const json = (await res.json()) as {
+      access_token: string;
+      expires_in?: number;
+    };
     const expiresInMs = (json.expires_in ?? 7200) * 1000;
     this.cachedToken = {
       accessToken: json.access_token,
@@ -74,7 +92,11 @@ export class SkydropxHttpClient implements SkydropxClient {
     return this.cachedToken.accessToken;
   }
 
-  private async request<T>(path: string, method: string, body?: unknown): Promise<T> {
+  private async request<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+  ): Promise<T> {
     const token = await this.getAccessToken();
     const res = await fetch(`${this.baseUrl}${path}`, {
       method,
@@ -88,8 +110,12 @@ export class SkydropxHttpClient implements SkydropxClient {
 
     if (!res.ok) {
       const text = await res.text();
-      this.logger.error(`Skydropx ${method} ${path} failed (${res.status}): ${text}`);
-      throw new ServiceUnavailableException(`Skydropx request failed (${res.status})`);
+      this.logger.error(
+        `Skydropx ${method} ${path} failed (${res.status}): ${text}`,
+      );
+      throw new ServiceUnavailableException(
+        `Skydropx request failed (${res.status})`,
+      );
     }
 
     if (res.status === 204) return undefined as T;
@@ -148,10 +174,14 @@ export class SkydropxHttpClient implements SkydropxClient {
   }
 
   async createShipment(input: CreateShipmentInput): Promise<ShipmentResult> {
-    const json = await this.request<SkydropxRawShipment>('/api/v1/shipments', 'POST', {
-      quotation_id: input.quotationId,
-      rate_id: input.rateId,
-    });
+    const json = await this.request<SkydropxRawShipment>(
+      '/api/v1/shipments',
+      'POST',
+      {
+        quotation_id: input.quotationId,
+        rate_id: input.rateId,
+      },
+    );
 
     const data = json.data ?? json;
     return {
@@ -175,7 +205,10 @@ export class SkydropxHttpClient implements SkydropxClient {
     );
   }
 
-  async getTracking(trackingNumber: string, carrierName: string): Promise<TrackingResult> {
+  async getTracking(
+    trackingNumber: string,
+    carrierName: string,
+  ): Promise<TrackingResult> {
     const json = await this.request<{
       status?: string;
       tracking_events?: SkydropxRawTrackingEvent[];

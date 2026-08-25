@@ -4,7 +4,7 @@ import { Resend } from 'resend';
 import { AppConfig } from '../../../../shared/config/configuration';
 import { NotificationChannel } from '../../application/ports/notification-channel';
 import { ConsoleEmailChannel } from './console-email.channel';
-import { EmailSender, ResendEmailChannel } from './resend-email.channel';
+import { ResendEmailChannel } from './resend-email.channel';
 
 const logger = new Logger('EmailChannelFactory');
 
@@ -24,10 +24,7 @@ export function createEmailChannel(
   const configured = typeof apiKey === 'string' && apiKey.trim().length > 0;
 
   if (configured) {
-    return new ResendEmailChannel(
-      new Resend(apiKey.trim()) as unknown as EmailSender,
-      config,
-    );
+    return new ResendEmailChannel(new Resend(apiKey.trim()), config);
   }
 
   const emailEnabled = config.get('notifications.emailEnabled', {

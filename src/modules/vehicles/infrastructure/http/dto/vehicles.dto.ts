@@ -13,7 +13,9 @@ export class CreateAssemblyPlantDto {
   assemblyPlant?: string;
 }
 
-export class UpdateAssemblyPlantDto extends PartialType(CreateAssemblyPlantDto) {}
+export class UpdateAssemblyPlantDto extends PartialType(
+  CreateAssemblyPlantDto,
+) {}
 
 export class CreateModelCarDto {
   @ApiPropertyOptional()
@@ -60,7 +62,9 @@ export class CreateMotorizationCarDto {
   motorization?: string;
 }
 
-export class UpdateMotorizationCarDto extends PartialType(CreateMotorizationCarDto) {}
+export class UpdateMotorizationCarDto extends PartialType(
+  CreateMotorizationCarDto,
+) {}
 
 export class CreateModelCarMotorizationDto {
   @ApiProperty()

@@ -11,7 +11,10 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { PaymentMethodService } from '../../application/services/payment-method.service';
-import { CreatePaymentMethodDto, UpdatePaymentMethodDto } from './dto/commerce.dto';
+import {
+  CreatePaymentMethodDto,
+  UpdatePaymentMethodDto,
+} from './dto/commerce.dto';
 
 @ApiTags('commerce — payment methods')
 @ApiBearerAuth()

@@ -26,7 +26,8 @@ export class AssemblyPlantService {
 
   async findByCode(code: string): Promise<AssemblyPlantEntity> {
     const found = await this.repo.findOne({ where: { code } });
-    if (!found) throw new NotFoundException(`AssemblyPlant code ${code} not found`);
+    if (!found)
+      throw new NotFoundException(`AssemblyPlant code ${code} not found`);
     return found;
   }
 
@@ -34,7 +35,10 @@ export class AssemblyPlantService {
     return this.repo.save(this.repo.create(dto));
   }
 
-  async update(id: string, dto: UpdateAssemblyPlantDto): Promise<AssemblyPlantEntity> {
+  async update(
+    id: string,
+    dto: UpdateAssemblyPlantDto,
+  ): Promise<AssemblyPlantEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

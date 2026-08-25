@@ -12,7 +12,7 @@ describe('PolarWebhookService', () => {
   const webhookRepo = {
     save: jest.fn().mockResolvedValue({}),
     update: jest.fn().mockResolvedValue({}),
-    create: jest.fn((x) => x),
+    create: jest.fn((x: unknown) => x),
   };
 
   const orderRepo = {
@@ -23,7 +23,7 @@ describe('PolarWebhookService', () => {
   const paymentRepo = {
     findOne: jest.fn().mockResolvedValue(null),
     save: jest.fn(),
-    create: jest.fn((x) => x),
+    create: jest.fn((x: unknown) => x),
   };
 
   const checkoutRepo = {
@@ -40,7 +40,7 @@ describe('PolarWebhookService', () => {
             grandTotal: 50,
             paymentStatus: 'pending',
           }),
-          save: jest.fn((o) => Promise.resolve(o)),
+          save: jest.fn((o: unknown) => Promise.resolve(o)),
         };
       }
       if (entity === PolarCheckoutEntity) {
@@ -49,15 +49,15 @@ describe('PolarWebhookService', () => {
             orderId: 'order-uuid',
             polarCheckoutId: 'ch-1',
           }),
-          save: jest.fn((c) => Promise.resolve(c)),
-          create: jest.fn((x) => x),
+          save: jest.fn((c: unknown) => Promise.resolve(c)),
+          create: jest.fn((x: unknown) => x),
         };
       }
       if (entity === OrderPaymentEntity) {
         return {
           findOne: jest.fn().mockResolvedValue(null),
           save: jest.fn(),
-          create: jest.fn((x) => x),
+          create: jest.fn((x: unknown) => x),
         };
       }
       return {};
@@ -65,7 +65,9 @@ describe('PolarWebhookService', () => {
   };
 
   const dataSource = {
-    transaction: jest.fn((fn) => fn(txRepos)),
+    transaction: jest.fn((fn: (repos: typeof txRepos) => unknown) =>
+      fn(txRepos),
+    ),
   };
 
   let service: PolarWebhookService;
@@ -79,10 +81,19 @@ describe('PolarWebhookService', () => {
         PolarWebhookService,
         { provide: EventEmitter2, useValue: events },
         { provide: DataSource, useValue: dataSource },
-        { provide: getRepositoryToken(WebhookEventEntity), useValue: webhookRepo },
-        { provide: getRepositoryToken(PolarCheckoutEntity), useValue: checkoutRepo },
+        {
+          provide: getRepositoryToken(WebhookEventEntity),
+          useValue: webhookRepo,
+        },
+        {
+          provide: getRepositoryToken(PolarCheckoutEntity),
+          useValue: checkoutRepo,
+        },
         { provide: getRepositoryToken(OrderEntity), useValue: orderRepo },
-        { provide: getRepositoryToken(OrderPaymentEntity), useValue: paymentRepo },
+        {
+          provide: getRepositoryToken(OrderPaymentEntity),
+          useValue: paymentRepo,
+        },
       ],
     }).compile();
 
@@ -104,7 +115,7 @@ describe('PolarWebhookService', () => {
     expect(dataSource.transaction).toHaveBeenCalled();
     expect(webhookRepo.update).toHaveBeenCalledWith(
       { polarEventId: 'order.paid:polar-order-1' },
-      expect.objectContaining({ processedAt: expect.any(Date) }),
+      expect.objectContaining({ processedAt: expect.any(Date) as unknown }),
     );
   });
 });

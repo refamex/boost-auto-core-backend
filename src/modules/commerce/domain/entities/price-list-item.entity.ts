@@ -32,7 +32,12 @@ export class PriceListItemEntity {
   @JoinColumn({ name: 'product_id' })
   product?: ProductEntity;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    transformer: numericTransformer,
+  })
   price!: number;
 
   @Column({ type: 'int', name: 'min_qty', default: 1 })

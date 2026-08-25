@@ -10,7 +10,13 @@ import { BrandProviderController } from './infrastructure/http/brand-provider.co
 import { ProviderController } from './infrastructure/http/provider.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ProviderEntity, ProviderBranchEntity, BrandProviderEntity])],
+  imports: [
+    TypeOrmModule.forFeature([
+      ProviderEntity,
+      ProviderBranchEntity,
+      BrandProviderEntity,
+    ]),
+  ],
   providers: [ProviderService, ProviderBranchService, BrandProviderService],
   controllers: [ProviderController, BrandProviderController],
   exports: [ProviderService, ProviderBranchService],

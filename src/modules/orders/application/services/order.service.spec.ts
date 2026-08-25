@@ -103,7 +103,9 @@ describe('OrderService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    productRepo.find.mockResolvedValue([{ id: 1, sku: 'SKU-1', name: 'Widget' }]);
+    productRepo.find.mockResolvedValue([
+      { id: 1, sku: 'SKU-1', name: 'Widget' },
+    ]);
     inventoryRepo.findBySkuAndBranch.mockResolvedValue({ id: 10 });
     orderTxRepo.findOne.mockResolvedValue(makeOrder());
     service = new OrderService(
@@ -177,7 +179,10 @@ describe('OrderService', () => {
 
     it('throws 403 when called with no actor at all', async () => {
       await expect(
-        service.create(makeCreateDto(), undefined as unknown as AuthenticatedUser),
+        service.create(
+          makeCreateDto(),
+          undefined as unknown as AuthenticatedUser,
+        ),
       ).rejects.toThrow(ForbiddenException);
       expect(orderTxRepo.save).not.toHaveBeenCalled();
     });
@@ -185,10 +190,16 @@ describe('OrderService', () => {
     it('lets staff keep explicit control of customerId and status, unchanged', async () => {
       readBackPersistedOrder();
 
-      await service.create(makeCreateDto({ customerId: 'someone-else' }), staff);
+      await service.create(
+        makeCreateDto({ customerId: 'someone-else' }),
+        staff,
+      );
 
       expect(orderTxRepo.save).toHaveBeenCalledWith(
-        expect.objectContaining({ customerId: 'someone-else', status: 'draft' }),
+        expect.objectContaining({
+          customerId: 'someone-else',
+          status: 'draft',
+        }),
       );
     });
 
@@ -218,7 +229,9 @@ describe('OrderService', () => {
     it('applies no ownership binding and defaults no contact email (Defect B)', async () => {
       orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
 
-      await service.createInternal(makeCreateDto({ customerId: 'quote-customer' }));
+      await service.createInternal(
+        makeCreateDto({ customerId: 'quote-customer' }),
+      );
 
       expect(orderTxRepo.save).toHaveBeenCalledWith(
         expect.objectContaining({

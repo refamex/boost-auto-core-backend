@@ -1,6 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { HealthCheck, HealthCheckService, TypeOrmHealthIndicator } from '@nestjs/terminus';
+import {
+  HealthCheck,
+  HealthCheckService,
+  TypeOrmHealthIndicator,
+} from '@nestjs/terminus';
 import { Public } from '../common/decorators/public.decorator';
 
 @ApiTags('health')
@@ -15,6 +19,8 @@ export class HealthController {
   @Get()
   @HealthCheck()
   check() {
-    return this.health.check([() => this.db.pingCheck('database', { timeout: 1500 })]);
+    return this.health.check([
+      () => this.db.pingCheck('database', { timeout: 1500 }),
+    ]);
   }
 }

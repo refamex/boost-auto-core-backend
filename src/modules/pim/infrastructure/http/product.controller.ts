@@ -84,7 +84,10 @@ export class ProductController {
 
   @Post(':id/colors')
   @Roles('pim:write')
-  createColor(@Param('id', ParseIntPipe) id: number, @Body() dto: CreateProductColorDto) {
+  createColor(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateProductColorDto,
+  ) {
     return this.colors.create(id, dto);
   }
 
@@ -120,7 +123,10 @@ export class ProductController {
 
   @Post('by-sku/:sku/dimensions')
   @Roles('pim:write')
-  upsertDimensions(@Param('sku') sku: string, @Body() dto: UpsertProductDimensionDto) {
+  upsertDimensions(
+    @Param('sku') sku: string,
+    @Body() dto: UpsertProductDimensionDto,
+  ) {
     return this.dimensions.upsertBySku(sku, dto);
   }
 
@@ -131,7 +137,10 @@ export class ProductController {
 
   @Post('by-sku/:sku/cross-references')
   @Roles('pim:write')
-  createCrossRef(@Param('sku') sku: string, @Body() dto: CreateCrossReferenceDto) {
+  createCrossRef(
+    @Param('sku') sku: string,
+    @Body() dto: CreateCrossReferenceDto,
+  ) {
     return this.crossRefs.create(sku, dto);
   }
 

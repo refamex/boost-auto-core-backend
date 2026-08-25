@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { CategoryEntity } from './category.entity';
 
 @Entity({ schema: 'pim', name: 'category_department' })

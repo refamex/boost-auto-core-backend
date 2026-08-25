@@ -18,4 +18,6 @@ export class CreateCategoryDepartmentDto {
   isActive?: boolean;
 }
 
-export class UpdateCategoryDepartmentDto extends PartialType(CreateCategoryDepartmentDto) {}
+export class UpdateCategoryDepartmentDto extends PartialType(
+  CreateCategoryDepartmentDto,
+) {}

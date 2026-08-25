@@ -1,17 +1,18 @@
-import { execSync } from 'node:child_process';
 import {
   PostgreSqlContainer,
   StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import { DataSource } from 'typeorm';
 import { TypeOrmInventoryRepository } from '../src/modules/inventory/infrastructure/persistence/typeorm-inventory.repository';
+import { describeWithDocker } from './docker-gate';
 
 /**
  * Exercises the raw SQL behind supplier stock imports against a real Postgres.
  *
  * Unit tests mock the repository, so the ON CONFLICT upsert, the GREATEST
  * clamp that protects the aggregate invariant, and the zero-out statement are
- * only ever proven here. Skips itself when Docker is unavailable.
+ * only ever proven here. Skips locally without Docker; under CI it fails
+ * instead (see `docker-gate`).
  */
 
 interface StockRow {
@@ -19,23 +20,19 @@ interface StockRow {
   reserved_stock: number | null;
 }
 
-const hasDocker = (): boolean => {
-  try {
-    execSync('docker info', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const describeWithDocker = hasDocker() ? describe : describe.skip;
-
 describeWithDocker('inventory bulk stock SQL', () => {
   jest.setTimeout(240_000);
 
   let container: StartedPostgreSqlContainer;
   let dataSource: DataSource;
   let repo: TypeOrmInventoryRepository;
+
+  /**
+   * `inventory.inventory` references products by id, not by sku — `product_sku`
+   * was dropped when the schema moved to id references. The port still speaks
+   * SKU, so resolve once here and let the assertions keep reading in SKU terms.
+   */
+  const productIdBySku = new Map<string, number>();
 
   let nvBranch: number;
   let tnBranch: number;
@@ -76,9 +73,16 @@ describeWithDocker('inventory bulk stock SQL', () => {
     nvBranch = Number(sparks.id);
     tnBranch = Number(dyersburg.id);
 
-    await dataSource.query(
-      "INSERT INTO pim.product (sku, name) VALUES ('A1','a'),('A2','b'),('A3','c')",
+    const products = await dataSource.query<Array<{ id: number; sku: string }>>(
+      `INSERT INTO pim.product (sku, name)
+       VALUES ('A1','a'),('A2','b'),('A3','c')
+       RETURNING id, sku`,
     );
+    for (const row of products) productIdBySku.set(row.sku, Number(row.id));
+    // Assert the seed rather than trusting it: a fixture that silently resolved
+    // nothing would make every id below `undefined`, and the queries would
+    // quietly match zero rows instead of failing here with a readable message.
+    expect([...productIdBySku.keys()].sort()).toEqual(['A1', 'A2', 'A3']);
 
     repo = new TypeOrmInventoryRepository(dataSource);
   });
@@ -92,11 +96,17 @@ describeWithDocker('inventory bulk stock SQL', () => {
     await dataSource.query('DELETE FROM inventory.inventory');
   });
 
+  const productId = (sku: string): number => {
+    const id = productIdBySku.get(sku);
+    if (id === undefined) throw new Error(`unseeded sku in fixture: ${sku}`);
+    return id;
+  };
+
   const stockOf = async (sku: string, branchId: number): Promise<StockRow> => {
     const rows = await dataSource.query<StockRow[]>(
       `SELECT stock, reserved_stock FROM inventory.inventory
-        WHERE product_sku = $1 AND provider_branch_id = $2`,
-      [sku, branchId],
+        WHERE product_id = $1 AND provider_branch_id = $2`,
+      [productId(sku), branchId],
     );
     return rows[0];
   };
@@ -155,7 +165,8 @@ describeWithDocker('inventory bulk stock SQL', () => {
       },
     ]);
     await dataSource.query(
-      "UPDATE inventory.inventory SET reserved_stock = 4 WHERE product_sku = 'A1'",
+      'UPDATE inventory.inventory SET reserved_stock = 4 WHERE product_id = $1',
+      [productId('A1')],
     );
 
     const result = await repo.bulkUpsertStock([
@@ -189,7 +200,8 @@ describeWithDocker('inventory bulk stock SQL', () => {
       },
     ]);
     await dataSource.query(
-      "UPDATE inventory.inventory SET reserved_stock = NULL WHERE product_sku = 'A2'",
+      'UPDATE inventory.inventory SET reserved_stock = NULL WHERE product_id = $1',
+      [productId('A2')],
     );
 
     await repo.bulkUpsertStock([
@@ -226,7 +238,8 @@ describeWithDocker('inventory bulk stock SQL', () => {
       },
     ]);
     await dataSource.query(
-      "UPDATE inventory.inventory SET reserved_stock = 2 WHERE product_sku = 'A3'",
+      'UPDATE inventory.inventory SET reserved_stock = 2 WHERE product_id = $1',
+      [productId('A3')],
     );
 
     const affected = await repo.zeroOutMissing([nvBranch, tnBranch], ['A1']);

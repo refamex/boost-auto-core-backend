@@ -26,7 +26,11 @@ import { PolarWebhookController } from './infrastructure/http/polar-webhook.cont
     PolarCheckoutService,
     PolarWebhookService,
   ],
-  controllers: [OrderPolarCheckoutController, PolarCheckoutController, PolarWebhookController],
+  controllers: [
+    OrderPolarCheckoutController,
+    PolarCheckoutController,
+    PolarWebhookController,
+  ],
   exports: [PolarCheckoutService],
 })
 export class PaymentsModule {}

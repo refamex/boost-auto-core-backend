@@ -67,8 +67,10 @@ describe('ShippingQuoteService', () => {
     expect(result.quotationId).toBe('q-1');
     expect(skydropx.quote).toHaveBeenCalledWith(
       expect.objectContaining({
-        destination: expect.objectContaining({ postalCode: '06600' }),
-        parcel: expect.objectContaining({ weight: 2 }),
+        destination: expect.objectContaining({
+          postalCode: '06600',
+        }) as unknown,
+        parcel: expect.objectContaining({ weight: 2 }) as unknown,
       }),
     );
   });
@@ -94,7 +96,7 @@ describe('ShippingQuoteService', () => {
       parcelLength: 1,
       parcelWidth: 1,
       parcelHeight: 1,
-    } as OrderEntity);
+    });
     await expect(service.quoteForOrder('o', staff)).rejects.toThrow(
       BadRequestException,
     );
@@ -105,7 +107,7 @@ describe('ShippingQuoteService', () => {
       id: 'o',
       shipToStreet1: 'x',
       shipToPostalCode: '00000',
-    } as OrderEntity);
+    });
     await expect(service.quoteForOrder('o', staff)).rejects.toThrow(
       BadRequestException,
     );
@@ -116,7 +118,7 @@ describe('ShippingQuoteService', () => {
     await service.quoteForOrder('order-uuid', staff, { parcel: { weight: 5 } });
     expect(skydropx.quote).toHaveBeenCalledWith(
       expect.objectContaining({
-        parcel: expect.objectContaining({ weight: 5 }),
+        parcel: expect.objectContaining({ weight: 5 }) as unknown,
       }),
     );
   });

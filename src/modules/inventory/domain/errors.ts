@@ -1,4 +1,8 @@
-import { ConflictDomainError, NotFoundDomainError, ValidationDomainError } from '../../../shared/common/errors/domain.error';
+import {
+  ConflictDomainError,
+  NotFoundDomainError,
+  ValidationDomainError,
+} from '../../../shared/common/errors/domain.error';
 
 export class InventoryNotFoundError extends NotFoundDomainError {
   constructor(id: number) {

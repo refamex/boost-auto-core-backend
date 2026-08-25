@@ -13,8 +13,15 @@ export class AdjustStockUseCase {
     @Inject(INVENTORY_REPOSITORY) private readonly repo: InventoryRepository,
   ) {}
 
-  async execute(id: number, delta: number, reason: string, actorId?: string): Promise<Inventory> {
-    const { inventory } = await this.repo.mutate(id, (inv) => inv.adjust(delta));
+  async execute(
+    id: number,
+    delta: number,
+    reason: string,
+    actorId?: string,
+  ): Promise<Inventory> {
+    const { inventory } = await this.repo.mutate(id, (inv) =>
+      inv.adjust(delta),
+    );
     this.logger.log(
       `Inventory ${id} adjusted by ${delta} (reason="${reason}", actor=${actorId ?? 'unknown'}) → stock=${inventory.stock}`,
     );

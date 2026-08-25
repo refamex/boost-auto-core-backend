@@ -1,0 +1,18 @@
+# Line endings are normalised to LF in the repository AND on checkout.
+#
+# Not cosmetic. Before this file, CRLF was committed into the blobs themselves,
+# so a Linux CI runner checked out CRLF and prettier reported one error per
+# line — over twenty thousand of them — which would have made the lint gate
+# unusable on its first run. `eol=lf` (not just `text=auto`) also stops Windows
+# checkouts from reintroducing CR, so the class cannot come back.
+* text=auto eol=lf
+
+# Binary assets must never be touched by the eol filter.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

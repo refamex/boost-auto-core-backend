@@ -36,13 +36,18 @@ const buildMockRepo = (
     findExistingProductSkus: jest.fn(),
     bulkUpsertStock: jest.fn(),
     zeroOutMissing: jest.fn(),
-    mutate: jest.fn(async (id: number, fn) => {
-      if (id !== 42) throw new InventoryNotFoundError(id);
+    // Not wrapped in `jest.fn`: the port's `mutate` is generic in the mutator's
+    // return type, and a `jest.Mock` cannot carry a generic signature — it
+    // would fix T at construction and break every caller. No test spies on it.
+    // Returning `Promise.reject` rather than throwing keeps the rejection
+    // asynchronous, exactly as the previous `async` body did.
+    mutate: <T>(id: number, fn: (inv: Inventory) => T) => {
+      if (id !== 42) return Promise.reject(new InventoryNotFoundError(id));
       const result = fn(aggregate);
       // persist by rebuilding from snapshot (mimic repo behavior)
       aggregate = Inventory.fromSnapshot(aggregate.toSnapshot());
-      return { inventory: aggregate, result };
-    }),
+      return Promise.resolve({ inventory: aggregate, result });
+    },
   };
 };
 

@@ -30,7 +30,10 @@ export class PolarWebhookController {
   @Public()
   @Post()
   @HttpCode(200)
-  async handle(@Req() req: RawBodyRequest, @Headers() headers: Record<string, string | string[]>) {
+  async handle(
+    @Req() req: RawBodyRequest,
+    @Headers() headers: Record<string, string | string[]>,
+  ) {
     const secret = this.config.get('polar.webhookSecret', { infer: true });
     if (!secret) {
       throw new UnauthorizedException('Polar webhook secret not configured');
@@ -49,7 +52,9 @@ export class PolarWebhookController {
       throw e;
     }
 
-    await this.webhookService.handle(event as Parameters<PolarWebhookService['handle']>[0]);
+    await this.webhookService.handle(
+      event as Parameters<PolarWebhookService['handle']>[0],
+    );
     return { received: true };
   }
 
