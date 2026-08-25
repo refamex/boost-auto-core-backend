@@ -26,13 +26,13 @@ export class OrderController {
   constructor(private readonly svc: OrderService) {}
 
   @Get()
-  list(@Query() query: OrderQueryDto) {
-    return this.svc.list(query);
+  list(@CurrentUser() user: AuthenticatedUser, @Query() query: OrderQueryDto) {
+    return this.svc.list(user, query);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.svc.findById(id);
+  findById(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.svc.findById(id, user);
   }
 
   @Post()
