@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -21,7 +22,11 @@ import { ReserveStockUseCase } from '../../../inventory/application/use-cases/re
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderPaymentEntity } from '../../domain/entities/order-payment.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
-import { buildWhere } from '../../domain/order-visibility';
+import {
+  bindCreate,
+  buildWhere,
+  OrderCreateBinding,
+} from '../../domain/order-visibility';
 import {
   CreateOrderDto,
   CreateOrderPaymentDto,
@@ -82,12 +87,50 @@ export class OrderService {
   }
 
   /**
-   * `actor` is used only to default the contact email from the JWT claim. It
-   * stays optional so in-process callers can keep supplying contact via DTO.
+   * HTTP entry point. `actor` is REQUIRED: the ownership binding IS the
+   * security boundary (F1/F8/F10). A caller with no actor, or a customer
+   * caller whose `customerId` doesn't match their own id, is rejected with
+   * 403 before any row is written — a create asserts the caller's own
+   * identity rather than probing another's row, so there is nothing to
+   * conceal (unlike the read path, which answers 404/empty page instead).
    */
   async create(
     dto: CreateOrderDto,
-    actor?: AuthenticatedUser,
+    actor: AuthenticatedUser,
+  ): Promise<OrderEntity> {
+    if (!actor) {
+      throw new ForbiddenException(
+        'order creation requires an authenticated caller',
+      );
+    }
+    const bound = bindCreate(actor, dto);
+    if (!bound) {
+      throw new ForbiddenException(
+        'customerId must match the authenticated customer',
+      );
+    }
+    return this.persist(dto, bound, actor.email);
+  }
+
+  /**
+   * In-process entry point. There is no HTTP actor here: `QuoteService.convert`
+   * creates the order on behalf of the quote's customer, who is not the
+   * caller — the caller already authorized itself (`assertRep` + `loadOwned`).
+   * No binding is applied and no contact email is defaulted, so the acting
+   * rep's address can never be frozen onto the customer's order (Defect B).
+   */
+  createInternal(dto: CreateOrderDto): Promise<OrderEntity> {
+    return this.persist(
+      dto,
+      { customerId: dto.customerId, status: dto.status ?? 'draft' },
+      undefined,
+    );
+  }
+
+  private async persist(
+    dto: CreateOrderDto,
+    bound: OrderCreateBinding,
+    contactEmail?: string,
   ): Promise<OrderEntity> {
     const created = await this.dataSource.transaction(async (tx) => {
       const products = await this.loadProducts(
@@ -98,16 +141,16 @@ export class OrderService {
       const order = await tx.getRepository(OrderEntity).save(
         tx.getRepository(OrderEntity).create({
           orderNumber: this.generateOrderNumber(),
-          customerId: dto.customerId,
+          customerId: bound.customerId,
           salesRepId: dto.salesRepId,
           providerBranchId: dto.providerBranchId,
-          status: dto.status ?? 'draft',
+          status: bound.status,
           // Contact is frozen onto the order because the notification triggers
           // that matter most — the Polar and Skydropx webhooks — run with no
           // user context at all. Without this there is nobody to write to.
           shipToName: dto.shipToName,
           shipToPhone: dto.shipToPhone,
-          shipToEmail: dto.shipToEmail ?? actor?.email,
+          shipToEmail: dto.shipToEmail ?? contactEmail,
           subtotal,
           taxTotal,
           grandTotal: subtotal + taxTotal,

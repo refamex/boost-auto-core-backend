@@ -1,12 +1,20 @@
-import { BadRequestException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { SKYDROPX_CLIENT } from '../ports/skydropx.client';
 import { ShippingQuoteService } from './shipping-quote.service';
 
 describe('ShippingQuoteService', () => {
+  const customer: AuthenticatedUser = { id: 'customer-1', roles: [] };
+  const staff: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
+
   const fullOrder = {
     id: 'order-uuid',
     shipToStreet1: 'Av. Reforma 100',
@@ -23,14 +31,17 @@ describe('ShippingQuoteService', () => {
   const skydropx = {
     quote: jest.fn().mockResolvedValue({
       quotationId: 'q-1',
-      rates: [{ rateId: 'r-1', carrierName: 'fedex', amount: 150, currency: 'MXN' }],
+      rates: [
+        { rateId: 'r-1', carrierName: 'fedex', amount: 150, currency: 'MXN' },
+      ],
     }),
   };
 
   const config = {
     get: jest.fn((key: string) => {
       if (key === 'skydropx.enabled') return true;
-      if (key === 'skydropx.origin') return { countryCode: 'MX', street1: 'Bodega 1', postalCode: '64000' };
+      if (key === 'skydropx.origin')
+        return { countryCode: 'MX', street1: 'Bodega 1', postalCode: '64000' };
       return undefined;
     }),
   };
@@ -52,7 +63,7 @@ describe('ShippingQuoteService', () => {
 
   it('quotes using order destination + parcel', async () => {
     orderRepo.findOne.mockResolvedValue(fullOrder);
-    const result = await service.quoteForOrder('order-uuid');
+    const result = await service.quoteForOrder('order-uuid', staff);
     expect(result.quotationId).toBe('q-1');
     expect(skydropx.quote).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -64,17 +75,29 @@ describe('ShippingQuoteService', () => {
 
   it('throws when shipping disabled', async () => {
     (config.get as jest.Mock).mockReturnValueOnce(false);
-    await expect(service.quoteForOrder('order-uuid')).rejects.toThrow(ServiceUnavailableException);
+    await expect(service.quoteForOrder('order-uuid', staff)).rejects.toThrow(
+      ServiceUnavailableException,
+    );
   });
 
   it('throws 404 when order not found', async () => {
     orderRepo.findOne.mockResolvedValue(null);
-    await expect(service.quoteForOrder('missing')).rejects.toThrow(NotFoundException);
+    await expect(service.quoteForOrder('missing', staff)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('throws 400 when destination address missing', async () => {
-    orderRepo.findOne.mockResolvedValue({ id: 'o', parcelWeight: 2, parcelLength: 1, parcelWidth: 1, parcelHeight: 1 } as OrderEntity);
-    await expect(service.quoteForOrder('o')).rejects.toThrow(BadRequestException);
+    orderRepo.findOne.mockResolvedValue({
+      id: 'o',
+      parcelWeight: 2,
+      parcelLength: 1,
+      parcelWidth: 1,
+      parcelHeight: 1,
+    } as OrderEntity);
+    await expect(service.quoteForOrder('o', staff)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('throws 400 when parcel dimensions missing', async () => {
@@ -83,14 +106,36 @@ describe('ShippingQuoteService', () => {
       shipToStreet1: 'x',
       shipToPostalCode: '00000',
     } as OrderEntity);
-    await expect(service.quoteForOrder('o')).rejects.toThrow(BadRequestException);
+    await expect(service.quoteForOrder('o', staff)).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it('applies request override over order data', async () => {
     orderRepo.findOne.mockResolvedValue(fullOrder);
-    await service.quoteForOrder('order-uuid', { parcel: { weight: 5 } });
+    await service.quoteForOrder('order-uuid', staff, { parcel: { weight: 5 } });
     expect(skydropx.quote).toHaveBeenCalledWith(
-      expect.objectContaining({ parcel: expect.objectContaining({ weight: 5 }) }),
+      expect.objectContaining({
+        parcel: expect.objectContaining({ weight: 5 }),
+      }),
+    );
+  });
+
+  it('404s and never calls Skydropx when the order is not the caller own', async () => {
+    orderRepo.findOne.mockResolvedValue(null);
+    await expect(service.quoteForOrder('order-uuid', customer)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(skydropx.quote).not.toHaveBeenCalled();
+  });
+
+  it('resolves the order through the shared ownership predicate', async () => {
+    orderRepo.findOne.mockResolvedValue(fullOrder);
+    await service.quoteForOrder('order-uuid', customer);
+    expect(orderRepo.findOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { customerId: 'customer-1', id: 'order-uuid' },
+      }),
     );
   });
 });
