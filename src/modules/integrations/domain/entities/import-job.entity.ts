@@ -1,4 +1,10 @@
-import { Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  CreateDateColumn,
+  Entity,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { ImportJobLogEntity } from './import-job-log.entity';
 
 @Entity({ schema: 'integrations', name: 'import_jobs' })
@@ -9,7 +15,12 @@ export class ImportJobEntity {
   @Column({ type: 'varchar', length: 100, name: 'job_type' })
   jobType!: string;
 
-  @Column({ type: 'varchar', length: 150, name: 'source_system', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 150,
+    name: 'source_system',
+    nullable: true,
+  })
   sourceSystem?: string | null;
 
   @Column({ type: 'varchar', length: 50 })

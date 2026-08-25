@@ -2,7 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CategoryEntity } from '../../domain/entities/category.entity';
-import { CategoryQueryDto, CreateCategoryDto, UpdateCategoryDto } from '../../infrastructure/http/dto/taxonomies.dto';
+import {
+  CategoryQueryDto,
+  CreateCategoryDto,
+  UpdateCategoryDto,
+} from '../../infrastructure/http/dto/taxonomies.dto';
 
 @Injectable()
 export class CategoryService {
@@ -18,11 +22,16 @@ export class CategoryService {
       .orderBy('c.code', 'ASC');
 
     if (query.departmentCode) {
-      qb.andWhere('d.code = :departmentCode', { departmentCode: query.departmentCode });
+      qb.andWhere('d.code = :departmentCode', {
+        departmentCode: query.departmentCode,
+      });
     }
     if (query.brandCode) {
-      qb.innerJoin('pim.brand_category', 'bc', 'bc.category_code = c.code')
-        .andWhere('bc.brand_code = :brandCode', { brandCode: query.brandCode });
+      qb.innerJoin(
+        'pim.brand_category',
+        'bc',
+        'bc.category_code = c.code',
+      ).andWhere('bc.brand_code = :brandCode', { brandCode: query.brandCode });
     }
     if (query.isActive !== undefined) {
       qb.andWhere('c.is_active = :isActive', { isActive: query.isActive });
@@ -31,7 +40,10 @@ export class CategoryService {
   }
 
   async findById(id: number): Promise<CategoryEntity> {
-    const found = await this.repo.findOne({ where: { id }, relations: ['department'] });
+    const found = await this.repo.findOne({
+      where: { id },
+      relations: ['department'],
+    });
     if (!found) throw new NotFoundException(`Category ${id} not found`);
     return found;
   }

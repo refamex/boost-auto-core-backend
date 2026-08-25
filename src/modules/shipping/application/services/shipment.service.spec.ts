@@ -18,17 +18,19 @@ describe('ShipmentService', () => {
 
   const shipmentRepo = {
     findOne: jest.fn(),
-    save: jest.fn((x) => Promise.resolve({ id: 'ship-uuid', ...x })),
-    create: jest.fn((x) => x),
+    save: jest.fn((x: Record<string, unknown>) =>
+      Promise.resolve({ id: 'ship-uuid', ...x }),
+    ),
+    create: jest.fn((x: unknown) => x),
   };
   const trackingRepo = {
     findOne: jest.fn(),
-    save: jest.fn((x) => Promise.resolve(x)),
-    create: jest.fn((x) => x),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
+    create: jest.fn((x: unknown) => x),
   };
   const orderRepo = {
     findOne: jest.fn().mockResolvedValue(order),
-    save: jest.fn((x) => Promise.resolve(x)),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
   };
 
   const skydropx = {

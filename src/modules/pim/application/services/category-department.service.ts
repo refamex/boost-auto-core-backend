@@ -20,15 +20,21 @@ export class CategoryDepartmentService {
 
   async findById(id: number): Promise<CategoryDepartmentEntity> {
     const found = await this.repo.findOne({ where: { id } });
-    if (!found) throw new NotFoundException(`CategoryDepartment ${id} not found`);
+    if (!found)
+      throw new NotFoundException(`CategoryDepartment ${id} not found`);
     return found;
   }
 
-  async create(dto: CreateCategoryDepartmentDto): Promise<CategoryDepartmentEntity> {
+  async create(
+    dto: CreateCategoryDepartmentDto,
+  ): Promise<CategoryDepartmentEntity> {
     return this.repo.save(this.repo.create(dto));
   }
 
-  async update(id: number, dto: UpdateCategoryDepartmentDto): Promise<CategoryDepartmentEntity> {
+  async update(
+    id: number,
+    dto: UpdateCategoryDepartmentDto,
+  ): Promise<CategoryDepartmentEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

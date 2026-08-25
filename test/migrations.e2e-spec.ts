@@ -1,9 +1,9 @@
-import { execSync } from 'node:child_process';
 import {
   PostgreSqlContainer,
   StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import { DataSource } from 'typeorm';
+import { describeWithDocker } from './docker-gate';
 
 /**
  * Proves the migration chain runs on a database that has never seen it.
@@ -20,21 +20,11 @@ import { DataSource } from 'typeorm';
  * the id migration removed — so the failure reads as "that suite is broken"
  * rather than "the schema is broken". Isolation is the whole point.
  *
- * NOTE: like every e2e here, this skips without Docker. That skip is itself
- * part of why the defect survived, so treat a skipped run as NO evidence, not
- * as a pass.
+ * NOTE: like every e2e here, this skips without Docker LOCALLY. That skip is
+ * itself part of why the defect survived, so treat a skipped run as NO
+ * evidence, not as a pass — which is exactly why `docker-gate` refuses to
+ * skip under CI and fails the run instead.
  */
-
-const hasDocker = (): boolean => {
-  try {
-    execSync('docker info', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const describeWithDocker = hasDocker() ? describe : describe.skip;
 
 /** Every index the id migration destroyed, restored by the repair migration. */
 const RESTORED_INDEXES = [

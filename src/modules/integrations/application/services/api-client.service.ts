@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
 import { QueryFailedError, Repository } from 'typeorm';
@@ -34,7 +38,10 @@ export class ApiClientService {
         }),
       );
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException('api key conflict');
       }
       throw e;

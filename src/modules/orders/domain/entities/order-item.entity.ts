@@ -35,16 +35,40 @@ export class OrderItemEntity {
   @Column({ type: 'text', name: 'name_snapshot' })
   nameSnapshot!: string;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    transformer: numericTransformer,
+  })
   qty!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'unit_price_snapshot', transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'unit_price_snapshot',
+    transformer: numericTransformer,
+  })
   unitPriceSnapshot!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'tax_snapshot', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'tax_snapshot',
+    default: 0,
+    transformer: numericTransformer,
+  })
   taxSnapshot!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'line_total', transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'line_total',
+    transformer: numericTransformer,
+  })
   lineTotal!: number;
 
   @CreateDateColumn({ type: 'timestamp', name: 'created_at' })

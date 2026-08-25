@@ -21,7 +21,10 @@ export class BrandCategoryController {
   constructor(private readonly svc: BrandCategoryService) {}
 
   @Get()
-  list(@Query('brandCode') brandCode?: string, @Query('categoryCode') categoryCode?: string) {
+  list(
+    @Query('brandCode') brandCode?: string,
+    @Query('categoryCode') categoryCode?: string,
+  ) {
     return this.svc.list(brandCode, categoryCode);
   }
 

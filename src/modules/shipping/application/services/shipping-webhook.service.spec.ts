@@ -6,25 +6,28 @@ import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { ShipmentTrackingEventEntity } from '../../domain/entities/shipment-tracking-event.entity';
 import { ShipmentEntity } from '../../domain/entities/shipment.entity';
 import { ShippingWebhookEventEntity } from '../../domain/entities/shipping-webhook-event.entity';
-import { ShippingWebhookService, SkydropxWebhookPayload } from './shipping-webhook.service';
+import {
+  ShippingWebhookService,
+  SkydropxWebhookPayload,
+} from './shipping-webhook.service';
 
 describe('ShippingWebhookService', () => {
   const webhookRepo = {
     save: jest.fn(),
-    create: jest.fn((x) => x),
+    create: jest.fn((x: unknown) => x),
     update: jest.fn(),
   };
   const shipmentRepo = {
     findOne: jest.fn(),
-    save: jest.fn((x) => Promise.resolve(x)),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
   };
   const trackingRepo = {
-    save: jest.fn((x) => Promise.resolve(x)),
-    create: jest.fn((x) => x),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
+    create: jest.fn((x: unknown) => x),
   };
   const orderRepo = {
     findOne: jest.fn(),
-    save: jest.fn((x) => Promise.resolve(x)),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
   };
 
   let service: ShippingWebhookService;
@@ -32,7 +35,11 @@ describe('ShippingWebhookService', () => {
   const event: SkydropxWebhookPayload = {
     type: 'tracking.updated',
     id: 'evt-1',
-    data: { shipment_id: 'sky-1', status: 'delivered', occurred_at: '2026-05-25T10:00:00Z' },
+    data: {
+      shipment_id: 'sky-1',
+      status: 'delivered',
+      occurred_at: '2026-05-25T10:00:00Z',
+    },
   };
 
   const events = { emit: jest.fn() };
@@ -43,9 +50,15 @@ describe('ShippingWebhookService', () => {
       providers: [
         ShippingWebhookService,
         { provide: EventEmitter2, useValue: events },
-        { provide: getRepositoryToken(ShippingWebhookEventEntity), useValue: webhookRepo },
+        {
+          provide: getRepositoryToken(ShippingWebhookEventEntity),
+          useValue: webhookRepo,
+        },
         { provide: getRepositoryToken(ShipmentEntity), useValue: shipmentRepo },
-        { provide: getRepositoryToken(ShipmentTrackingEventEntity), useValue: trackingRepo },
+        {
+          provide: getRepositoryToken(ShipmentTrackingEventEntity),
+          useValue: trackingRepo,
+        },
         { provide: getRepositoryToken(OrderEntity), useValue: orderRepo },
       ],
     }).compile();
@@ -54,19 +67,28 @@ describe('ShippingWebhookService', () => {
 
   it('records event, updates shipment + order, marks processed', async () => {
     webhookRepo.save.mockResolvedValue({});
-    shipmentRepo.findOne.mockResolvedValue({ id: 'ship-uuid', orderId: 'order-uuid', status: 'created' });
-    orderRepo.findOne.mockResolvedValue({ id: 'order-uuid', shippingStatus: 'in_transit' });
+    shipmentRepo.findOne.mockResolvedValue({
+      id: 'ship-uuid',
+      orderId: 'order-uuid',
+      status: 'created',
+    });
+    orderRepo.findOne.mockResolvedValue({
+      id: 'order-uuid',
+      shippingStatus: 'in_transit',
+    });
 
     await service.handle(event);
 
-    expect(shipmentRepo.save).toHaveBeenCalledWith(expect.objectContaining({ status: 'delivered' }));
+    expect(shipmentRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'delivered' }),
+    );
     expect(orderRepo.save).toHaveBeenCalledWith(
       expect.objectContaining({ shippingStatus: 'delivered' }),
     );
     expect(trackingRepo.save).toHaveBeenCalled();
     expect(webhookRepo.update).toHaveBeenCalledWith(
       { skydropxEventId: 'tracking.updated:evt-1' },
-      expect.objectContaining({ processedAt: expect.any(Date) }),
+      expect.objectContaining({ processedAt: expect.any(Date) as unknown }),
     );
   });
 

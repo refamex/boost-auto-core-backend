@@ -28,7 +28,10 @@ export class VolumeCategoryService {
     return this.repo.save(this.repo.create(dto));
   }
 
-  async update(id: number, dto: UpdateVolumeCategoryDto): Promise<VolumeCategoryEntity> {
+  async update(
+    id: number,
+    dto: UpdateVolumeCategoryDto,
+  ): Promise<VolumeCategoryEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

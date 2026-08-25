@@ -18,7 +18,10 @@ import {
   CreateStockUseCase,
   GetStockByIdUseCase,
 } from '../../application/use-cases/create-stock.use-case';
-import { ListStockUseCase, SummaryBySkuUseCase } from '../../application/use-cases/read-stock.use-case';
+import {
+  ListStockUseCase,
+  SummaryBySkuUseCase,
+} from '../../application/use-cases/read-stock.use-case';
 import {
   AdjustStockDto,
   CreateInventoryDto,
@@ -73,14 +76,20 @@ export class InventoryController {
 
   @Post(':id/reserve')
   @Roles('inventory:write')
-  async reserve(@Param('id', ParseIntPipe) id: number, @Body() dto: ReserveStockDto) {
+  async reserve(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReserveStockDto,
+  ) {
     const inv = await this.reserveStock.execute(id, dto.qty);
     return this.toView(inv);
   }
 
   @Post(':id/release')
   @Roles('inventory:write')
-  async release(@Param('id', ParseIntPipe) id: number, @Body() dto: ReleaseStockDto) {
+  async release(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReleaseStockDto,
+  ) {
     const inv = await this.releaseStock.execute(id, dto.qty);
     return this.toView(inv);
   }
@@ -92,7 +101,12 @@ export class InventoryController {
     @Body() dto: AdjustStockDto,
     @CurrentUser() user?: AuthenticatedUser,
   ) {
-    const inv = await this.adjustStock.execute(id, dto.delta, dto.reason, user?.id);
+    const inv = await this.adjustStock.execute(
+      id,
+      dto.delta,
+      dto.reason,
+      user?.id,
+    );
     return this.toView(inv);
   }
 

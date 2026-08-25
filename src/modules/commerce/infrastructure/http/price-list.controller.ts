@@ -70,7 +70,10 @@ export class PriceListController {
 
   @Patch('items/:itemId')
   @Roles('commerce:write')
-  updateItem(@Param('itemId') itemId: string, @Body() dto: UpdatePriceListItemDto) {
+  updateItem(
+    @Param('itemId') itemId: string,
+    @Body() dto: UpdatePriceListItemDto,
+  ) {
     return this.items.update(itemId, dto);
   }
 

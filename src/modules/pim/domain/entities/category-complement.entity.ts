@@ -14,7 +14,12 @@ export class CategoryComplementEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
 
-  @Column({ type: 'integer', name: 'category_index_id', nullable: true, transformer: bigintTransformer })
+  @Column({
+    type: 'integer',
+    name: 'category_index_id',
+    nullable: true,
+    transformer: bigintTransformer,
+  })
   categoryIndexId?: number | null;
 
   @ManyToOne(() => CategoryEntity)

@@ -61,7 +61,8 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     // Without it the rep tier is unreachable locally, and granting yourself
     // quotes:admin to work around that bypasses the very filter under test.
     const salesRepHeader = req.headers['x-sales-rep-id'];
-    const salesRepId = typeof salesRepHeader === 'string' ? salesRepHeader.trim() : undefined;
+    const salesRepId =
+      typeof salesRepHeader === 'string' ? salesRepHeader.trim() : undefined;
 
     req.user = { id: userId, roles, salesRepId: salesRepId || undefined };
     return true;

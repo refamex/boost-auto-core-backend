@@ -34,19 +34,51 @@ export class SaleEntity {
   @Column({ type: 'uuid', name: 'employee_id', nullable: true })
   employeeId?: string | null;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    default: 0,
+    transformer: numericTransformer,
+  })
   subtotal!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'discount_total', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'discount_total',
+    default: 0,
+    transformer: numericTransformer,
+  })
   discountTotal!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'tax_total', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'tax_total',
+    default: 0,
+    transformer: numericTransformer,
+  })
   taxTotal!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'grand_total', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'grand_total',
+    default: 0,
+    transformer: numericTransformer,
+  })
   grandTotal!: number;
 
-  @Column({ type: 'varchar', length: 50, name: 'payment_status', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'payment_status',
+    nullable: true,
+  })
   paymentStatus?: string | null;
 
   @Column({ type: 'varchar', length: 50, name: 'sale_status', nullable: true })

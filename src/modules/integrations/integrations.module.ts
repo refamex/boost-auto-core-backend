@@ -9,7 +9,13 @@ import { ApiClientController } from './infrastructure/http/api-client.controller
 import { ImportJobController } from './infrastructure/http/import-job.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ApiClientEntity, ImportJobEntity, ImportJobLogEntity])],
+  imports: [
+    TypeOrmModule.forFeature([
+      ApiClientEntity,
+      ImportJobEntity,
+      ImportJobLogEntity,
+    ]),
+  ],
   providers: [ApiClientService, ImportJobService],
   controllers: [ApiClientController, ImportJobController],
   exports: [ApiClientService, ImportJobService],

@@ -26,7 +26,8 @@ export class MotorizationCarService {
 
   async findByCode(code: string): Promise<MotorizationCarEntity> {
     const found = await this.repo.findOne({ where: { code } });
-    if (!found) throw new NotFoundException(`MotorizationCar code ${code} not found`);
+    if (!found)
+      throw new NotFoundException(`MotorizationCar code ${code} not found`);
     return found;
   }
 
@@ -34,7 +35,10 @@ export class MotorizationCarService {
     return this.repo.save(this.repo.create(dto));
   }
 
-  async update(id: string, dto: UpdateMotorizationCarDto): Promise<MotorizationCarEntity> {
+  async update(
+    id: string,
+    dto: UpdateMotorizationCarDto,
+  ): Promise<MotorizationCarEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

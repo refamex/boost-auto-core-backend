@@ -95,7 +95,9 @@ export class AddShippingSchema1779738126224 implements MigrationInterface {
     await queryRunner.query(
       `DROP TRIGGER IF EXISTS trg_shipments_updated_at ON shipping.shipments`,
     );
-    await queryRunner.query(`DROP TABLE IF EXISTS shipping.shipment_tracking_events`);
+    await queryRunner.query(
+      `DROP TABLE IF EXISTS shipping.shipment_tracking_events`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS shipping.webhook_events`);
     await queryRunner.query(`DROP TABLE IF EXISTS shipping.shipments`);
     await queryRunner.query(`DROP SCHEMA IF EXISTS shipping CASCADE`);

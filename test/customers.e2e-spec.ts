@@ -1,4 +1,3 @@
-import { execSync } from 'node:child_process';
 import {
   INestApplication,
   ValidationPipe,
@@ -12,6 +11,7 @@ import {
 import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import { describeWithDocker } from './docker-gate';
 
 /**
  * Drives the `customers` HTTP surface end to end against a real Postgres and
@@ -19,19 +19,8 @@ import { DataSource } from 'typeorm';
  * visibility tiers, D7's 400-on-body-ownership, and admin-only reassignment
  * are provable together, rather than through mocked-repository unit tests.
  * Mock auth (`X-User-Id`/`X-Roles`/`X-Sales-Rep-Id`) stands in for JWKS.
- * Skips itself when Docker is unavailable.
+ * Skips locally without Docker; under CI it fails instead (see `docker-gate`).
  */
-
-const hasDocker = (): boolean => {
-  try {
-    execSync('docker info', { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-};
-
-const describeWithDocker = hasDocker() ? describe : describe.skip;
 
 describeWithDocker('customers API (e2e)', () => {
   jest.setTimeout(240_000);

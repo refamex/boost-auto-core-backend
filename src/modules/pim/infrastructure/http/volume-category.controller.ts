@@ -41,7 +41,10 @@ export class VolumeCategoryController {
 
   @Patch(':id')
   @Roles('pim:write')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateVolumeCategoryDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateVolumeCategoryDto,
+  ) {
     return this.svc.update(id, dto);
   }
 

@@ -31,7 +31,11 @@ export interface PaginatedResult<T> {
   pages: number;
 }
 
-export function paginated<T>(items: T[], total: number, pagination: PaginationDto): PaginatedResult<T> {
+export function paginated<T>(
+  items: T[],
+  total: number,
+  pagination: PaginationDto,
+): PaginatedResult<T> {
   return {
     items,
     total,

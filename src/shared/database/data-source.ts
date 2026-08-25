@@ -16,13 +16,16 @@ export const dataSourceOptions: DataSourceOptions = {
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   synchronize: false,
   migrationsRun: false,
-  entities: [
-    isTs ? 'src/**/*.entity.ts' : 'dist/**/*.entity.js',
-  ],
+  entities: [isTs ? 'src/**/*.entity.ts' : 'dist/**/*.entity.js'],
   migrations: [
-    isTs ? 'src/shared/database/migrations/*.ts' : 'dist/shared/database/migrations/*.js',
+    isTs
+      ? 'src/shared/database/migrations/*.ts'
+      : 'dist/shared/database/migrations/*.js',
   ],
-  logging: process.env.NODE_ENV === 'development' ? ['error', 'warn', 'schema'] : ['error'],
+  logging:
+    process.env.NODE_ENV === 'development'
+      ? ['error', 'warn', 'schema']
+      : ['error'],
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);

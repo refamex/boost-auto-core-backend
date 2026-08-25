@@ -17,7 +17,9 @@ export function isValidSkydropxSignature(
 
   const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
   // La firma puede venir como "sha256=<hex>" o solo "<hex>".
-  const received = signature.includes('=') ? signature.split('=').pop()! : signature;
+  const received = signature.includes('=')
+    ? signature.split('=').pop()!
+    : signature;
 
   const expectedBuf = Buffer.from(expected, 'hex');
   const receivedBuf = Buffer.from(received, 'hex');

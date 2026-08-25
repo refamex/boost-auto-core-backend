@@ -38,7 +38,10 @@ export class ApiClientController {
 
   @Patch(':id')
   @Roles('integrations:write')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateApiClientDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateApiClientDto,
+  ) {
     return this.svc.update(id, dto);
   }
 

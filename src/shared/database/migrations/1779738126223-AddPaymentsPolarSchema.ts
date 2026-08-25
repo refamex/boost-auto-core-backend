@@ -51,7 +51,9 @@ export class AddPaymentsPolarSchema1779738126223 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TRIGGER IF EXISTS trg_polar_checkouts_updated_at ON payments.polar_checkouts`);
+    await queryRunner.query(
+      `DROP TRIGGER IF EXISTS trg_polar_checkouts_updated_at ON payments.polar_checkouts`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS payments.webhook_events`);
     await queryRunner.query(`DROP TABLE IF EXISTS payments.polar_checkouts`);
     await queryRunner.query(`DROP SCHEMA IF EXISTS payments CASCADE`);

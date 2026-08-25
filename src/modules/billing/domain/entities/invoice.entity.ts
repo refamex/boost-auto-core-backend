@@ -44,13 +44,33 @@ export class InvoiceEntity {
   @Column({ type: 'varchar', length: 255, name: 'legal_name', nullable: true })
   legalName?: string | null;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    default: 0,
+    transformer: numericTransformer,
+  })
   subtotal!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'tax_total', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'tax_total',
+    default: 0,
+    transformer: numericTransformer,
+  })
   taxTotal!: number;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, name: 'grand_total', default: 0, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'grand_total',
+    default: 0,
+    transformer: numericTransformer,
+  })
   grandTotal!: number;
 
   @Column({ type: 'varchar', length: 10, default: 'MXN' })

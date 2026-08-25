@@ -27,7 +27,10 @@ export class ImportJobService {
   }
 
   async findById(id: string): Promise<ImportJobEntity> {
-    const found = await this.jobRepo.findOne({ where: { id }, relations: ['logs'] });
+    const found = await this.jobRepo.findOne({
+      where: { id },
+      relations: ['logs'],
+    });
     if (!found) throw new NotFoundException(`ImportJob ${id} not found`);
     return found;
   }
@@ -46,13 +49,19 @@ export class ImportJobService {
     await this.jobRepo.remove(existing);
   }
 
-  async addLog(jobId: string, dto: CreateImportJobLogDto): Promise<ImportJobLogEntity> {
+  async addLog(
+    jobId: string,
+    dto: CreateImportJobLogDto,
+  ): Promise<ImportJobLogEntity> {
     await this.findById(jobId);
     return this.logRepo.save(this.logRepo.create({ jobId, ...dto }));
   }
 
   async listLogs(jobId: string): Promise<ImportJobLogEntity[]> {
     await this.findById(jobId);
-    return this.logRepo.find({ where: { jobId }, order: { createdAt: 'DESC' } });
+    return this.logRepo.find({
+      where: { jobId },
+      order: { createdAt: 'DESC' },
+    });
   }
 }

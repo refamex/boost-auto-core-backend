@@ -60,7 +60,6 @@ export class PolarWebhookService {
     this.events.emit(eventKey, payload);
   }
 
-
   async handle(event: PolarWebhookPayload): Promise<void> {
     const polarEventId = `${event.type}:${event.data.id}`;
 

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PaymentMethodEntity } from '../../domain/entities/payment-method.entity';
@@ -28,14 +32,20 @@ export class PaymentMethodService {
     try {
       return await this.repo.save(this.repo.create(dto));
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException('payment method code already exists');
       }
       throw e;
     }
   }
 
-  async update(id: string, dto: UpdatePaymentMethodDto): Promise<PaymentMethodEntity> {
+  async update(
+    id: string,
+    dto: UpdatePaymentMethodDto,
+  ): Promise<PaymentMethodEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

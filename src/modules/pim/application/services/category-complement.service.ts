@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, Repository } from 'typeorm';
 import { CategoryComplementEntity } from '../../domain/entities/category-complement.entity';
@@ -22,14 +26,17 @@ export class CategoryComplementService {
 
   create(dto: CreateCategoryComplementDto): Promise<CategoryComplementEntity> {
     if (dto.categoryIndexId === dto.categoryComplementId) {
-      throw new BadRequestException('categoryIndexId and categoryComplementId must differ');
+      throw new BadRequestException(
+        'categoryIndexId and categoryComplementId must differ',
+      );
     }
     return this.repo.save(this.repo.create(dto));
   }
 
   async remove(id: string): Promise<void> {
     const existing = await this.repo.findOne({ where: { id } });
-    if (!existing) throw new NotFoundException(`CategoryComplement ${id} not found`);
+    if (!existing)
+      throw new NotFoundException(`CategoryComplement ${id} not found`);
     await this.repo.remove(existing);
   }
 }

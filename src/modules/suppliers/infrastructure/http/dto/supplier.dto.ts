@@ -120,7 +120,9 @@ export class CreateProviderBranchDto {
   notes?: string;
 }
 
-export class UpdateProviderBranchDto extends PartialType(CreateProviderBranchDto) {}
+export class UpdateProviderBranchDto extends PartialType(
+  CreateProviderBranchDto,
+) {}
 
 export class CreateBrandProviderDto {
   @ApiProperty()

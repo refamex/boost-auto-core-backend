@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run proves nothing about the tip, so stop paying for it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Node and pnpm are pinned to the exact versions the Dockerfile builds with.
+  # If CI and the image drift apart, a green pipeline stops being evidence
+  # about the artifact that actually ships.
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.33.2'
+
+# Read-only, explicitly. The default repository scope may be read/write, and
+# every step below executes repository code — dependency lifecycle scripts on
+# install, then the PR author's own test files. Nothing here needs to write.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: lint, build, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    # `app.e2e-spec.ts` boots the whole AppModule, which opens a real
+    # connection pool — it is the one suite that does NOT bring its own
+    # container, so it needs a database sitting here. Every other e2e suite
+    # starts its own Testcontainers instance and ignores this one.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: autoboost_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      # Pinned to a commit, not the mutable v4 tag. Also drops the token from
+      # .git/config, which checkout persists by default; nothing here pushes.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Enable pnpm
+        run: corepack enable && corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # NOT `pnpm lint`: that script carries --fix, which MUTATES the checkout.
+      # A linter that repairs what it finds cannot report what it found, so in
+      # CI it would quietly launder the very problems this step exists to catch.
+      - name: Lint
+        run: pnpm exec eslint "{src,apps,libs,test}/**/*.ts" --max-warnings=0
+
+      - name: Build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      # Ubuntu runners ship a working Docker daemon, so Testcontainers runs for
+      # real here. `test/docker-gate.ts` turns a missing daemon into a failure
+      # rather than a skip whenever CI is set — without that, a runner without
+      # Docker would skip every suite below and still report this job green.
+      - name: End-to-end tests (Testcontainers)
+        run: pnpm test:e2e
+        env:
+          # Only the four the config schema demands unconditionally; every
+          # other integration stays behind its default-off feature flag.
+          DB_HOST: localhost
+          DB_PORT: '5432'
+          DB_NAME: autoboost_ci
+          DB_USER: postgres
+          DB_PASS: postgres

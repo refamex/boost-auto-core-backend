@@ -19,7 +19,12 @@ export class PriceListEntity {
   @Column({ type: 'varchar', length: 255 })
   name!: string;
 
-  @Column({ type: 'varchar', length: 50, name: 'customer_type', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'customer_type',
+    nullable: true,
+  })
   customerType?: string | null;
 
   @Column({ type: 'varchar', length: 10, default: 'MXN' })

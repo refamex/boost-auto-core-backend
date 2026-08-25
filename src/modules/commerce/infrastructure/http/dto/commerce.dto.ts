@@ -70,7 +70,9 @@ export class CreatePriceListItemDto {
   validTo?: string;
 }
 
-export class UpdatePriceListItemDto extends PartialType(CreatePriceListItemDto) {}
+export class UpdatePriceListItemDto extends PartialType(
+  CreatePriceListItemDto,
+) {}
 
 export class CreatePaymentMethodDto {
   @ApiProperty()
@@ -94,4 +96,6 @@ export class CreatePaymentMethodDto {
   isActive?: boolean;
 }
 
-export class UpdatePaymentMethodDto extends PartialType(CreatePaymentMethodDto) {}
+export class UpdatePaymentMethodDto extends PartialType(
+  CreatePaymentMethodDto,
+) {}

@@ -32,10 +32,20 @@ export class ShipmentEntity {
   @Column({ type: 'text', name: 'rate_id', nullable: true })
   rateId?: string | null;
 
-  @Column({ type: 'varchar', length: 120, name: 'carrier_name', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'carrier_name',
+    nullable: true,
+  })
   carrierName?: string | null;
 
-  @Column({ type: 'varchar', length: 120, name: 'service_level', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'service_level',
+    nullable: true,
+  })
   serviceLevel?: string | null;
 
   @Column({ type: 'text', name: 'tracking_number', nullable: true })

@@ -7,7 +7,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PriceListEntity } from '../../domain/entities/price-list.entity';
-import { CreatePriceListDto, UpdatePriceListDto } from '../../infrastructure/http/dto/commerce.dto';
+import {
+  CreatePriceListDto,
+  UpdatePriceListDto,
+} from '../../infrastructure/http/dto/commerce.dto';
 
 @Injectable()
 export class PriceListService {
@@ -53,7 +56,10 @@ export class PriceListService {
     try {
       return await this.repo.save(this.repo.create(dto));
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException('price list code already exists');
       }
       throw e;

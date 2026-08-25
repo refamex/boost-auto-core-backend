@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PriceListItemEntity } from '../../domain/entities/price-list-item.entity';
@@ -23,7 +27,10 @@ export class PriceListItemService {
   }
 
   async findById(id: string): Promise<PriceListItemEntity> {
-    const found = await this.repo.findOne({ where: { id }, relations: ['product'] });
+    const found = await this.repo.findOne({
+      where: { id },
+      relations: ['product'],
+    });
     if (!found) throw new NotFoundException(`PriceListItem ${id} not found`);
     return found;
   }
@@ -68,11 +75,17 @@ export class PriceListItemService {
     return found;
   }
 
-  async create(priceListId: string, dto: CreatePriceListItemDto): Promise<PriceListItemEntity> {
+  async create(
+    priceListId: string,
+    dto: CreatePriceListItemDto,
+  ): Promise<PriceListItemEntity> {
     try {
       return await this.repo.save(this.repo.create({ priceListId, ...dto }));
     } catch (e) {
-      if (e instanceof QueryFailedError && (e as { code?: string }).code === '23505') {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23505'
+      ) {
         throw new ConflictException(
           'price list item already exists for product/min_qty/valid_from',
         );
@@ -81,7 +94,10 @@ export class PriceListItemService {
     }
   }
 
-  async update(id: string, dto: UpdatePriceListItemDto): Promise<PriceListItemEntity> {
+  async update(
+    id: string,
+    dto: UpdatePriceListItemDto,
+  ): Promise<PriceListItemEntity> {
     const existing = await this.findById(id);
     return this.repo.save(this.repo.merge(existing, dto));
   }

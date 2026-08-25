@@ -32,13 +32,23 @@ export class OrderPaymentEntity {
   @Column({ type: 'varchar', length: 150, nullable: true })
   provider?: string | null;
 
-  @Column({ type: 'numeric', precision: 14, scale: 2, transformer: numericTransformer })
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    transformer: numericTransformer,
+  })
   amount!: number;
 
   @Column({ type: 'varchar', length: 50 })
   status!: string;
 
-  @Column({ type: 'varchar', length: 255, name: 'transaction_ref', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'transaction_ref',
+    nullable: true,
+  })
   transactionRef?: string | null;
 
   @Column({ type: 'timestamp', name: 'paid_at', nullable: true })
