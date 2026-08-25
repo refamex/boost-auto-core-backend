@@ -115,4 +115,26 @@ export const validationSchema = Joi.object({
   ROUGH_COUNTRY_SYNC_TZ: Joi.string().default('America/Mexico_City'),
 
   NOTIFICATIONS_EMAIL_ENABLED: Joi.boolean().default(false),
+
+  // Same shape as the JWT production gate (D9): a misconfiguration that would
+  // silently drop customer mail must refuse to boot rather than degrade to the
+  // console channel in production without anyone noticing.
+  RESEND_API_KEY: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.when('NOTIFICATIONS_EMAIL_ENABLED', {
+      is: true,
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
+    otherwise: Joi.optional(),
+  }),
+  MAIL_FROM: Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.when('NOTIFICATIONS_EMAIL_ENABLED', {
+      is: true,
+      then: Joi.required(),
+      otherwise: Joi.optional(),
+    }),
+    otherwise: Joi.optional(),
+  }),
 });

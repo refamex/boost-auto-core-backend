@@ -47,8 +47,12 @@ export interface RoughCountryConfig {
 }
 
 export interface NotificationsConfig {
-  /** Off by default: core has no mail credential of its own yet. */
+  /** Off by default; turning it on in production requires the two below. */
   emailEnabled: boolean;
+  /** Provider credential. Absent means fall back to the console channel. */
+  resendApiKey?: string;
+  /** RFC 5322 sender, e.g. `Auto Boost <no-reply@autoboost.mx>`. */
+  mailFrom: string;
 }
 
 export interface AppConfig {
@@ -143,5 +147,7 @@ export default (): AppConfig => ({
   },
   notifications: {
     emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',
+    resendApiKey: process.env.RESEND_API_KEY,
+    mailFrom: process.env.MAIL_FROM ?? 'Auto Boost <no-reply@autoboost.mx>',
   },
 });
