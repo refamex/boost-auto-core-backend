@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NotificationOutboxEntity } from '../../domain/entities/notification-outbox.entity';
 import { NotificationEntity } from '../../domain/entities/notification.entity';
 import { EmailSender, ResendEmailChannel } from './resend-email.channel';
@@ -145,6 +146,49 @@ describe('ResendEmailChannel', () => {
       // scrubbed, rather than dropped, emptied or replaced wholesale.
       expect(err?.message).toContain('[redacted]');
       expect(err?.message).toContain('Invalid `to` field');
+    });
+
+    // The sibling vector of the same leak. The SDK throws on transport
+    // failures and on some validation errors, and its own message can echo
+    // the recipient exactly as the returned error object can. Whatever
+    // escapes here is copied verbatim into the outbox row's failure reason.
+    it('redacts the recipient when the provider call REJECTS, not only when it returns an error', async () => {
+      send.mockRejectedValue(
+        new Error(
+          'Invalid `to` field: customer@example.com is not a valid address',
+        ),
+      );
+
+      const err = await makeChannel()
+        .send(makeNotification(), makeOutbox())
+        .then(() => null)
+        .catch((e: Error) => e);
+
+      expect(err).toBeInstanceOf(Error);
+      expect(err?.message).not.toContain('customer@example.com');
+      expect(err?.message).toContain('[redacted]');
+      expect(err?.message).toContain('Invalid `to` field');
+    });
+
+    // The thrown message was pinned; the LOG line was not, and it is the new
+    // PII surface: the returned-error branch logs only the error NAME.
+    it('redacts the recipient in the LOG line too, not only in the thrown error', async () => {
+      const logged: string[] = [];
+      const spy = jest
+        .spyOn(Logger.prototype, 'error')
+        .mockImplementation((m: unknown) => void logged.push(String(m)));
+      try {
+        send.mockRejectedValue(new Error('bad `to`: customer@example.com'));
+        await makeChannel()
+          .send(makeNotification(), makeOutbox())
+          .catch(() => undefined);
+        const out = logged.join(' | ');
+        expect(out).toContain('Resend threw');
+        expect(out).not.toContain('customer@example.com');
+        expect(out).toContain('[redacted]');
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('escapes markup in the title and body before it reaches the provider', async () => {

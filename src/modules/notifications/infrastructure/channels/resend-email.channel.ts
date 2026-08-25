@@ -73,12 +73,27 @@ export class ResendEmailChannel implements NotificationChannel {
 
     const from = this.config.get('notifications.mailFrom', { infer: true });
 
-    const { error } = await this.resend.emails.send({
-      from,
-      to,
-      subject: notification.title,
-      html: this.render(notification),
-    });
+    let error: { message: string; name: string } | null;
+    try {
+      ({ error } = await this.resend.emails.send({
+        from,
+        to,
+        subject: notification.title,
+        html: this.render(notification),
+      }));
+    } catch (e) {
+      // The SDK REJECTS on transport failures and on some validation errors,
+      // and its own message echoes the recipient exactly as the returned
+      // error object does. Whatever escapes this method is copied verbatim
+      // into the outbox row's failure reason, so this path needs the same
+      // redaction the returned-error path below already gets. Leaving it out
+      // would have kept the leak open through a second door.
+      const reason = e instanceof Error ? e.message : String(e);
+      this.logger.error(
+        `Resend threw for notification ${notification.id}: ${redactAddresses(reason)}`,
+      );
+      throw new Error(`email delivery failed: ${redactAddresses(reason)}`);
+    }
 
     if (error) {
       this.logger.error(
