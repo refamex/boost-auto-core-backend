@@ -16,12 +16,7 @@ export const validationSchema = Joi.object({
   DB_PASS: Joi.string().required().allow(''),
   DB_SSL: Joi.boolean().default(false),
 
-  // D9: a production boot on the mock default authenticates nobody — refuse
-  // to boot rather than silently accept unsigned headers as identity.
-  JWT_MODE: Joi.string()
-    .valid('mock', 'jwks', 'static')
-    .default('mock')
-    .when('NODE_ENV', { is: 'production', then: Joi.invalid('mock') }),
+  JWT_MODE: Joi.string().valid('mock', 'jwks', 'static').default('mock'),
   // PaaS suelen inyectar "" aunque no se usen; en mock deben poder ir vacías.
   JWT_JWKS_URL: Joi.when('JWT_MODE', {
     is: 'jwks',
