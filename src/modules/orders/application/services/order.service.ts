@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOptionsWhere, In, Repository } from 'typeorm';
+import { DataSource, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
@@ -21,6 +21,7 @@ import { ReserveStockUseCase } from '../../../inventory/application/use-cases/re
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderPaymentEntity } from '../../domain/entities/order-payment.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
+import { buildWhere } from '../../domain/order-visibility';
 import {
   CreateOrderDto,
   CreateOrderPaymentDto,
@@ -66,10 +67,9 @@ export class OrderService {
     this.events.emit(eventKey, payload);
   }
 
-  list(query: OrderQueryDto): Promise<OrderEntity[]> {
-    const where: FindOptionsWhere<OrderEntity> = {};
-    if (query.customerId) where.customerId = query.customerId;
-    if (query.status) where.status = query.status;
+  list(user: AuthenticatedUser, query: OrderQueryDto): Promise<OrderEntity[]> {
+    const where = buildWhere(user, query);
+    if (!where) return Promise.resolve([]);
     return this.orderRepo.find({
       where,
       relations: ['items', 'items.product', 'payments'],
@@ -77,13 +77,8 @@ export class OrderService {
     });
   }
 
-  async findById(id: string): Promise<OrderEntity> {
-    const found = await this.orderRepo.findOne({
-      where: { id },
-      relations: ['items', 'items.product', 'payments', 'providerBranch'],
-    });
-    if (!found) throw new NotFoundException(`Order ${id} not found`);
-    return found;
+  findById(id: string, user: AuthenticatedUser): Promise<OrderEntity> {
+    return this.loadVisible(id, user);
   }
 
   /**
@@ -152,12 +147,12 @@ export class OrderService {
   }
 
   async update(id: string, dto: UpdateOrderDto): Promise<OrderEntity> {
-    const existing = await this.findById(id);
+    const existing = await this.loadForWrite(id);
     return this.orderRepo.save(this.orderRepo.merge(existing, dto));
   }
 
   async confirm(id: string): Promise<OrderEntity> {
-    const order = await this.findById(id);
+    const order = await this.loadForWrite(id);
     if (order.status === 'confirmed') {
       throw new ConflictException('order is already confirmed');
     }
@@ -180,7 +175,7 @@ export class OrderService {
    * and one the customer is told about.
    */
   async prepare(id: string): Promise<OrderEntity> {
-    const order = await this.findById(id);
+    const order = await this.loadForWrite(id);
     if (order.status === 'cancelled') {
       throw new ConflictException('cannot prepare a cancelled order');
     }
@@ -196,7 +191,7 @@ export class OrderService {
   }
 
   async cancel(id: string): Promise<OrderEntity> {
-    const order = await this.findById(id);
+    const order = await this.loadForWrite(id);
     if (order.status === 'cancelled') {
       throw new ConflictException('order is already cancelled');
     }
@@ -215,8 +210,40 @@ export class OrderService {
     orderId: string,
     dto: CreateOrderPaymentDto,
   ): Promise<OrderPaymentEntity> {
-    await this.findById(orderId);
+    await this.loadForWrite(orderId);
     return this.paymentRepo.save(this.paymentRepo.create({ orderId, ...dto }));
+  }
+
+  /** Read access: ownership-scoped, per `order-visibility.buildWhere`. */
+  private async loadVisible(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<OrderEntity> {
+    const where = buildWhere(user, {});
+    if (!where) throw new NotFoundException(`Order ${id} not found`);
+
+    const found = await this.orderRepo.findOne({
+      where: { ...where, id },
+      relations: ['items', 'items.product', 'payments', 'providerBranch'],
+    });
+    // 404 rather than 403: a 403 would confirm the order exists.
+    if (!found) throw new NotFoundException(`Order ${id} not found`);
+    return found;
+  }
+
+  /**
+   * Write access: unscoped, today's pre-existing behavior for the five
+   * `@Roles('orders:write')` staff routes (`update`, `confirm`, `prepare`,
+   * `cancel`, `addPayment`). Ownership-based write authorization is
+   * deliberately out of scope for this change (D2).
+   */
+  private async loadForWrite(id: string): Promise<OrderEntity> {
+    const found = await this.orderRepo.findOne({
+      where: { id },
+      relations: ['items', 'items.product', 'payments', 'providerBranch'],
+    });
+    if (!found) throw new NotFoundException(`Order ${id} not found`);
+    return found;
   }
 
   private async reserveForOrder(order: OrderEntity): Promise<void> {
