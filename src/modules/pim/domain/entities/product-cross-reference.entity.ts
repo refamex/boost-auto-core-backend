@@ -15,35 +15,41 @@ export class ProductCrossReferenceEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
 
-  @Column({ type: 'text', name: 'product_sku' })
-  productSku!: string;
-
-  @ManyToOne(() => ProductEntity, { onUpdate: 'CASCADE', onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'product_sku', referencedColumnName: 'sku' })
+  @Column({ type: 'integer', name: 'product_id' })
+  productId!: number;
+  @ManyToOne(() => ProductEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product!: ProductEntity;
 
-  @Column({ type: 'text', name: 'product_brand', nullable: true })
-  productBrand?: string | null;
-
-  @ManyToOne(() => BrandEntity, { onUpdate: 'CASCADE', onDelete: 'SET NULL' })
-  @JoinColumn({ name: 'product_brand', referencedColumnName: 'brandCode' })
+  @Column({ type: 'integer', name: 'product_brand_id', nullable: true })
+  productBrandId?: number | null;
+  @ManyToOne(() => BrandEntity, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'product_brand_id' })
   productBrandRef?: BrandEntity;
 
-  @Column({ type: 'text', name: 'reference_sku', nullable: true })
-  referenceSku?: string | null;
+  @Column({ type: 'integer', name: 'reference_id', nullable: true })
+  referenceId?: number | null;
+  @ManyToOne(() => ProductEntity, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'reference_id' })
+  reference?: ProductEntity;
 
-  @Column({ type: 'text', name: 'reference_brand', nullable: true })
-  referenceBrand?: string | null;
+  @Column({ type: 'integer', name: 'reference_brand_id', nullable: true })
+  referenceBrandId?: number | null;
+  @ManyToOne(() => BrandEntity, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'reference_brand_id' })
+  referenceBrandRef?: BrandEntity;
 
-  @Column({ type: 'text', name: 'reference_product_sku', nullable: true })
-  referenceProductSku?: string | null;
+  @Column({ type: 'integer', name: 'reference_product_id', nullable: true })
+  referenceProductId?: number | null;
+  @ManyToOne(() => ProductEntity, { onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'reference_product_id' })
+  referenceProduct?: ProductEntity;
 
   @Column({ type: 'text', name: 'provider_sku', nullable: true })
   providerSku?: string | null;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
-
   @UpdateDateColumn({ type: 'timestamptz', name: 'updated_at' })
   updatedAt!: Date;
 }

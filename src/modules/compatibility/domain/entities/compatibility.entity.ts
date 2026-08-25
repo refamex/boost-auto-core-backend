@@ -8,31 +8,46 @@ import {
   Unique,
 } from 'typeorm';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
+import { AssemblyPlantEntity } from '../../../vehicles/domain/entities/assembly-plant.entity';
+import { ModelCarEntity } from '../../../vehicles/domain/entities/model-car.entity';
+import { MotorizationCarEntity } from '../../../vehicles/domain/entities/motorization-car.entity';
+import { YearCarEntity } from '../../../vehicles/domain/entities/year-car.entity';
 
 @Entity({ schema: 'compatibility', name: 'compatibilities' })
-@Unique(['sku', 'assemblyPlantCode', 'modelCode', 'yearCode', 'motorizationCode'])
+@Unique(['productId', 'assemblyPlantId', 'modelId', 'yearId', 'motorizationId'])
 export class CompatibilityEntity {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id!: string;
 
-  @Column({ type: 'text' })
-  sku!: string;
-
-  @ManyToOne(() => ProductEntity, { onDelete: 'CASCADE', onUpdate: 'CASCADE' })
-  @JoinColumn({ name: 'sku', referencedColumnName: 'sku' })
+  @Column({ type: 'integer', name: 'product_id' })
+  productId!: number;
+  @ManyToOne(() => ProductEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product?: ProductEntity;
 
-  @Column({ type: 'text', name: 'assembly_plant_code' })
-  assemblyPlantCode!: string;
+  @Column({ type: 'bigint', name: 'assembly_plant_id' })
+  assemblyPlantId!: string;
+  @ManyToOne(() => AssemblyPlantEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'assembly_plant_id' })
+  assemblyPlant?: AssemblyPlantEntity;
 
-  @Column({ type: 'text', name: 'model_code' })
-  modelCode!: string;
+  @Column({ type: 'bigint', name: 'model_id' })
+  modelId!: string;
+  @ManyToOne(() => ModelCarEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'model_id' })
+  model?: ModelCarEntity;
 
-  @Column({ type: 'text', name: 'year_code' })
-  yearCode!: string;
+  @Column({ type: 'integer', name: 'year_id' })
+  yearId!: number;
+  @ManyToOne(() => YearCarEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'year_id' })
+  year?: YearCarEntity;
 
-  @Column({ type: 'text', name: 'motorization_code' })
-  motorizationCode!: string;
+  @Column({ type: 'bigint', name: 'motorization_id' })
+  motorizationId!: string;
+  @ManyToOne(() => MotorizationCarEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'motorization_id' })
+  motorization?: MotorizationCarEntity;
 
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;

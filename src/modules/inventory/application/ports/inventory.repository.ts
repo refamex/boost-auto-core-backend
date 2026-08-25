@@ -90,7 +90,7 @@ export interface InventoryRepository {
   /**
    * Filters a list of SKUs down to those that exist in pim.product.
    *
-   * inventory.product_sku is an FK to pim.product(sku) with ON DELETE RESTRICT,
+   * inventory.product_id is an FK to pim.product(id) with ON DELETE RESTRICT,
    * so unknown SKUs must be dropped before any insert is attempted.
    */
   findExistingProductSkus(skus: string[]): Promise<Set<string>>;
