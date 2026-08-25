@@ -36,8 +36,8 @@ export class OrderController {
   }
 
   @Post()
-  @Roles('orders:write')
-  create(@Body() dto: CreateOrderDto, @CurrentUser() user?: AuthenticatedUser) {
+  @Roles('orders:create', 'orders:write')
+  create(@Body() dto: CreateOrderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.svc.create(dto, user);
   }
 

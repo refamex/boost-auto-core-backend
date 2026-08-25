@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from './jwt-payload.interface';
+import { expand } from './role-permissions';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -26,7 +27,8 @@ export class RolesGuard implements CanActivate {
     const user = req.user;
     if (!user) throw new ForbiddenException('Not authenticated');
 
-    const ok = required.every((r) => user.roles.includes(r));
+    const granted = expand(user.roles);
+    const ok = required.some((r) => granted.has(r));
     if (!ok)
       throw new ForbiddenException(`Missing role(s): ${required.join(', ')}`);
     return true;

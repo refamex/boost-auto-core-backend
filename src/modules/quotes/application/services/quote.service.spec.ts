@@ -104,7 +104,7 @@ describe('QuoteService', () => {
 
   const priceLists = { findApplicable: jest.fn(), findById: jest.fn() };
   const priceListItems = { resolveApplicablePrice: jest.fn() };
-  const orders = { create: jest.fn() };
+  const orders = { create: jest.fn(), createInternal: jest.fn() };
 
   // Jest hands mock arguments back as `any`; narrow them once here instead of
   // sprinkling casts through the assertions.
@@ -115,7 +115,9 @@ describe('QuoteService', () => {
     return calls[0][0];
   };
   const convertedOrderPayload = (): CreateOrderDto => {
-    const calls = orders.create.mock.calls as unknown as [CreateOrderDto][];
+    const calls = orders.createInternal.mock.calls as unknown as [
+      CreateOrderDto,
+    ][];
     return calls[0][0];
   };
 
@@ -302,13 +304,13 @@ describe('QuoteService', () => {
     beforeEach(() => {
       quoteRepo.findOne.mockResolvedValue(makeQuote({ status: 'approved' }));
       quoteRepo.update.mockResolvedValue({ affected: 1 });
-      orders.create.mockResolvedValue({ id: 'order-1' });
+      orders.createInternal.mockResolvedValue({ id: 'order-1' });
     });
 
     it('claims the quote before creating the order', async () => {
       await service.convert(QUOTE_ID, rep);
       const claimCallIndex = quoteRepo.update.mock.invocationCallOrder[0];
-      const createCallIndex = orders.create.mock.invocationCallOrder[0];
+      const createCallIndex = orders.createInternal.mock.invocationCallOrder[0];
       // Claim-first is what makes two concurrent converts unable to produce two
       // orders. Creating first and marking after would not.
       expect(claimCallIndex).toBeLessThan(createCallIndex);
@@ -316,7 +318,7 @@ describe('QuoteService', () => {
 
     it('hands the order the snapshotted prices, not a re-resolved one', async () => {
       await service.convert(QUOTE_ID, rep);
-      expect(orders.create).toHaveBeenCalledWith(
+      expect(orders.createInternal).toHaveBeenCalledWith(
         expect.objectContaining({
           items: [
             expect.objectContaining({
@@ -350,7 +352,32 @@ describe('QuoteService', () => {
       await expect(service.convert(QUOTE_ID, rep)).rejects.toThrow(
         ConflictException,
       );
+      expect(orders.createInternal).not.toHaveBeenCalled();
+    });
+
+    // Defect B regression (F11): threading the acting rep into the
+    // actor-bound `create` would freeze the rep's email onto the customer's
+    // order and misroute every future notification for it. `convert` must
+    // go through the in-process, no-actor `createInternal` entry point.
+    it('creates the order in-process for the quote customer, never through the actor-bound entry point', async () => {
+      await service.convert(QUOTE_ID, rep);
+      const payload = convertedOrderPayload();
+      expect(payload.customerId).toBe(CUSTOMER_ID);
+      expect(payload.customerId).not.toBe(rep.id);
+      expect(orders.createInternal).toHaveBeenCalledTimes(1);
       expect(orders.create).not.toHaveBeenCalled();
+    });
+
+    it('sets no shipToEmail on the payload, so the acting rep address cannot leak onto the order', async () => {
+      await service.convert(QUOTE_ID, rep);
+      const payload = convertedOrderPayload();
+      expect(payload.shipToEmail).toBeUndefined();
+    });
+
+    it('succeeds when the acting rep id differs from the quote customerId', async () => {
+      await expect(service.convert(QUOTE_ID, rep)).resolves.toEqual(
+        expect.objectContaining({ id: QUOTE_ID }),
+      );
     });
   });
 
