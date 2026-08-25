@@ -10,6 +10,8 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { CurrentUser } from '../../../../shared/common/decorators/current-user.decorator';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { InvoiceService } from '../../application/services/invoice.service';
 import {
@@ -26,13 +28,16 @@ export class InvoiceController {
   constructor(private readonly svc: InvoiceService) {}
 
   @Get()
-  list(@Query() query: InvoiceQueryDto) {
-    return this.svc.list(query);
+  list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: InvoiceQueryDto,
+  ) {
+    return this.svc.list(user, query);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.svc.findById(id);
+  findById(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.svc.findById(id, user);
   }
 
   @Post()
@@ -55,8 +60,11 @@ export class InvoiceController {
   }
 
   @Get(':id/documents')
-  listDocuments(@Param('id') id: string) {
-    return this.svc.listDocuments(id);
+  listDocuments(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.svc.listDocuments(id, user);
   }
 
   @Post(':id/documents')

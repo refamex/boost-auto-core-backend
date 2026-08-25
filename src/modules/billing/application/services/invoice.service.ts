@@ -5,10 +5,12 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOptionsWhere, QueryFailedError, Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { InvoiceDocumentEntity } from '../../domain/entities/invoice-document.entity';
 import { InvoiceEntity } from '../../domain/entities/invoice.entity';
+import { buildWhere } from '../../domain/invoice-visibility';
 import {
   CreateInvoiceDocumentDto,
   CreateInvoiceDto,
@@ -26,10 +28,15 @@ export class InvoiceService {
     private readonly events: EventEmitter2,
   ) {}
 
-  list(query: InvoiceQueryDto): Promise<InvoiceEntity[]> {
-    const where: FindOptionsWhere<InvoiceEntity> = {};
-    if (query.customerId) where.customerId = query.customerId;
-    if (query.orderId) where.orderId = query.orderId;
+  async list(
+    user: AuthenticatedUser,
+    query: InvoiceQueryDto,
+  ): Promise<InvoiceEntity[]> {
+    const where = buildWhere(user, query);
+    // `null` means the filter can never match anything this caller may see.
+    // Empty page rather than 403: refusing would confirm the rows exist.
+    if (!where) return [];
+
     return this.invoiceRepo.find({
       where,
       relations: ['documents', 'order', 'sale'],
@@ -37,13 +44,8 @@ export class InvoiceService {
     });
   }
 
-  async findById(id: string): Promise<InvoiceEntity> {
-    const found = await this.invoiceRepo.findOne({
-      where: { id },
-      relations: ['documents', 'order', 'sale'],
-    });
-    if (!found) throw new NotFoundException(`Invoice ${id} not found`);
-    return found;
+  findById(id: string, user: AuthenticatedUser): Promise<InvoiceEntity> {
+    return this.loadVisible(id, user);
   }
 
   async create(dto: CreateInvoiceDto): Promise<InvoiceEntity> {
@@ -73,12 +75,12 @@ export class InvoiceService {
   }
 
   async update(id: string, dto: UpdateInvoiceDto): Promise<InvoiceEntity> {
-    const existing = await this.findById(id);
+    const existing = await this.loadForWrite(id);
     return this.invoiceRepo.save(this.invoiceRepo.merge(existing, dto));
   }
 
   async remove(id: string): Promise<void> {
-    const existing = await this.findById(id);
+    const existing = await this.loadForWrite(id);
     await this.invoiceRepo.remove(existing);
   }
 
@@ -86,7 +88,7 @@ export class InvoiceService {
     invoiceId: string,
     dto: CreateInvoiceDocumentDto,
   ): Promise<InvoiceDocumentEntity> {
-    const invoice = await this.findById(invoiceId);
+    const invoice = await this.loadForWrite(invoiceId);
     const document = await this.documentRepo.save(
       this.documentRepo.create({ invoiceId, ...dto }),
     );
@@ -107,8 +109,13 @@ export class InvoiceService {
     return document;
   }
 
-  async listDocuments(invoiceId: string): Promise<InvoiceDocumentEntity[]> {
-    await this.findById(invoiceId);
+  async listDocuments(
+    invoiceId: string,
+    user: AuthenticatedUser,
+  ): Promise<InvoiceDocumentEntity[]> {
+    // Scoped on purpose: the documents ARE the invoice as far as a customer
+    // is concerned, so this route needs the same predicate the invoice does.
+    await this.loadVisible(invoiceId, user);
     return this.documentRepo.find({
       where: { invoiceId },
       order: { createdAt: 'DESC' },
@@ -120,6 +127,41 @@ export class InvoiceService {
     if (!doc)
       throw new NotFoundException(`InvoiceDocument ${documentId} not found`);
     await this.documentRepo.remove(doc);
+  }
+
+  /**
+   * Read access: the caller only ever resolves an invoice their own
+   * visibility predicate admits. 404 rather than 403, matching `list`'s
+   * empty page — both refuse to confirm that a foreign invoice exists.
+   */
+  private async loadVisible(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<InvoiceEntity> {
+    const scope = buildWhere(user, {});
+    const found = scope
+      ? await this.invoiceRepo.findOne({
+          where: { ...scope, id },
+          relations: ['documents', 'order', 'sale'],
+        })
+      : null;
+    if (!found) throw new NotFoundException(`Invoice ${id} not found`);
+    return found;
+  }
+
+  /**
+   * Write access: unscoped, today's pre-existing behavior for the
+   * `@Roles('billing:write')` staff routes (`update`, `remove`,
+   * `addDocument`). Ownership-based write authorization is deliberately out
+   * of scope for this change, exactly as it is for orders (D2).
+   */
+  private async loadForWrite(id: string): Promise<InvoiceEntity> {
+    const found = await this.invoiceRepo.findOne({
+      where: { id },
+      relations: ['documents', 'order', 'sale'],
+    });
+    if (!found) throw new NotFoundException(`Invoice ${id} not found`);
+    return found;
   }
 
   private generateInvoiceNumber(): string {

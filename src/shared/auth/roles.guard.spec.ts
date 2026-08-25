@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { OrderController } from '../../modules/orders/infrastructure/http/order.controller';
+import { ShippingController } from '../../modules/shipping/infrastructure/http/shipping.controller';
 import { AuthenticatedUser } from './jwt-payload.interface';
 import { ROLE_PERMISSIONS, expand } from './role-permissions';
 import { RolesGuard } from './roles.guard';
@@ -61,7 +62,10 @@ describe('RolesGuard — role expansion, then `some` (D1, D4/D7)', () => {
 
 describe('role-permissions map — customer row and admin growth (F6, F11)', () => {
   it('customer expands to exactly orders:create and shipping:read', () => {
-    expect(ROLE_PERMISSIONS.customer).toEqual(['orders:create', 'shipping:read']);
+    expect(ROLE_PERMISSIONS.customer).toEqual([
+      'orders:create',
+      'shipping:read',
+    ]);
   });
 
   it('admin is 24 strings, including billing:admin and orders:create', () => {
@@ -82,7 +86,10 @@ describe('role-permissions map — customer row and admin growth (F6, F11)', () 
 
 describe('OrderController route gates — Defect A regression (F11)', () => {
   const realReflector = new Reflector();
-  const customerActor: AuthenticatedUser = { id: 'cust-1', roles: ['customer'] };
+  const customerActor: AuthenticatedUser = {
+    id: 'cust-1',
+    roles: ['customer'],
+  };
 
   const ctxForController = (
     method: (...args: never[]) => unknown,
@@ -103,7 +110,9 @@ describe('OrderController route gates — Defect A regression (F11)', () => {
     const guard = new RolesGuard(realReflector);
 
     expect(
-      guard.canActivate(ctxForController(OrderController.prototype.create, customerActor)),
+      guard.canActivate(
+        ctxForController(OrderController.prototype.create, customerActor),
+      ),
     ).toBe(true);
   });
 
@@ -123,4 +132,75 @@ describe('OrderController route gates — Defect A regression (F11)', () => {
       ).toThrow(ForbiddenException);
     },
   );
+});
+
+describe('ShippingController route gates — F9', () => {
+  const realReflector = new Reflector();
+  // `customer` expands to exactly `orders:create` and `shipping:read`.
+  const customerActor: AuthenticatedUser = {
+    id: 'cust-1',
+    roles: ['customer'],
+  };
+
+  const ctxForController = (
+    method: (...args: never[]) => unknown,
+    user: AuthenticatedUser,
+  ): ExecutionContext =>
+    ({
+      getHandler: () => method,
+      getClass: () => ShippingController,
+      switchToHttp: () => ({ getRequest: () => ({ user }) }),
+    }) as unknown as ExecutionContext;
+
+  /* eslint-disable @typescript-eslint/unbound-method */
+  it('quoting an order is reachable with shipping:read alone', () => {
+    const guard = new RolesGuard(realReflector);
+    expect(
+      guard.canActivate(
+        ctxForController(ShippingController.prototype.quote, customerActor),
+      ),
+    ).toBe(true);
+  });
+
+  it('reading the shipment for an order is reachable with shipping:read', () => {
+    const guard = new RolesGuard(realReflector);
+    expect(
+      guard.canActivate(
+        ctxForController(ShippingController.prototype.byOrder, customerActor),
+      ),
+    ).toBe(true);
+  });
+
+  it('reading tracking is reachable with shipping:read', () => {
+    const guard = new RolesGuard(realReflector);
+    expect(
+      guard.canActivate(
+        ctxForController(ShippingController.prototype.tracking, customerActor),
+      ),
+    ).toBe(true);
+  });
+
+  // Both buy or void a real Skydropx label and cost real money, so widening
+  // the quote gate must not drag them along.
+  it('creating a shipment still rejects a shipping:read-only caller', () => {
+    const guard = new RolesGuard(realReflector);
+    expect(() =>
+      guard.canActivate(
+        ctxForController(
+          ShippingController.prototype.createShipment,
+          customerActor,
+        ),
+      ),
+    ).toThrow();
+  });
+
+  it('cancelling a shipment still rejects a shipping:read-only caller', () => {
+    const guard = new RolesGuard(realReflector);
+    expect(() =>
+      guard.canActivate(
+        ctxForController(ShippingController.prototype.cancel, customerActor),
+      ),
+    ).toThrow();
+  });
+  /* eslint-enable @typescript-eslint/unbound-method */
 });
