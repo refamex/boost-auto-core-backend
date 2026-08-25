@@ -13,23 +13,27 @@ import { ProductEntity } from '../../../pim/domain/entities/product.entity';
 import { ProviderBranchEntity } from '../../../suppliers/domain/entities/provider-branch.entity';
 
 @Entity({ schema: 'inventory', name: 'inventory' })
-@Unique(['productSku', 'providerBranchId'])
-@Index(['productSku', 'providerBranchId'])
+@Unique(['productId', 'providerBranchId'])
+@Index(['productId', 'providerBranchId'])
 export class InventoryEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
-  @Column({ type: 'text', name: 'product_sku' })
-  productSku!: string;
+  @Column({ type: 'integer', name: 'product_id' })
+  productId!: number;
 
-  @ManyToOne(() => ProductEntity, { onUpdate: 'CASCADE' })
-  @JoinColumn({ name: 'product_sku', referencedColumnName: 'sku' })
+  @ManyToOne(() => ProductEntity, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'product_id' })
   product?: ProductEntity;
 
   @Column({ type: 'text', name: 'provider_sku' })
   providerSku!: string;
 
-  @Column({ type: 'bigint', name: 'provider_branch_id', transformer: bigintTransformer })
+  @Column({
+    type: 'bigint',
+    name: 'provider_branch_id',
+    transformer: bigintTransformer,
+  })
   providerBranchId!: number;
 
   @ManyToOne(() => ProviderBranchEntity)

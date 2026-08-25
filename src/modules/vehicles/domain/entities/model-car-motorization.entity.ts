@@ -1,14 +1,31 @@
-import { Column, Entity, PrimaryGeneratedColumn, Unique } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+  Unique,
+} from 'typeorm';
+import { ModelCarEntity } from './model-car.entity';
+import { MotorizationCarEntity } from './motorization-car.entity';
 
 @Entity({ schema: 'vehicles', name: 'model_car_motorization' })
-@Unique(['modelCarCode', 'motorizationCode'])
+@Unique(['modelCarId', 'motorizationId'])
 export class ModelCarMotorizationEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
-  @Column({ type: 'text', name: 'model_car_code', nullable: true })
-  modelCarCode?: string | null;
+  @Column({ type: 'bigint', name: 'model_car_id', nullable: true })
+  modelCarId?: string | null;
 
-  @Column({ type: 'text', name: 'motorization_code', nullable: true })
-  motorizationCode?: string | null;
+  @ManyToOne(() => ModelCarEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'model_car_id' })
+  modelCar?: ModelCarEntity;
+
+  @Column({ type: 'bigint', name: 'motorization_id', nullable: true })
+  motorizationId?: string | null;
+
+  @ManyToOne(() => MotorizationCarEntity, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'motorization_id' })
+  motorization?: MotorizationCarEntity;
 }

@@ -1,4 +1,10 @@
-import { Column, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn } from 'typeorm';
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToOne,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
 import { ProductEntity } from './product.entity';
 
 @Entity({ schema: 'pim', name: 'product_dimension' })
@@ -6,11 +12,11 @@ export class ProductDimensionEntity {
   @PrimaryGeneratedColumn({ type: 'integer' })
   id!: number;
 
-  @Column({ type: 'text', name: 'product_sku', unique: true })
-  productSku!: string;
+  @Column({ type: 'integer', name: 'product_id', unique: true })
+  productId!: number;
 
-  @ManyToOne(() => ProductEntity, (p) => p.dimensions, { onUpdate: 'CASCADE' })
-  @JoinColumn({ name: 'product_sku', referencedColumnName: 'sku' })
+  @ManyToOne(() => ProductEntity, (p) => p.dimensions, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'product_id' })
   product!: ProductEntity;
 
   @Column({ type: 'double precision', nullable: true })

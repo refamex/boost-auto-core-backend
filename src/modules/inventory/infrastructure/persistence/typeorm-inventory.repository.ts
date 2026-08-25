@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { DataSource, EntityManager, QueryFailedError } from 'typeorm';
 import {
   BulkStockRow,
@@ -18,7 +22,7 @@ import { InventoryEntity } from '../../domain/entities/inventory.entity';
 const BULK_CHUNK_SIZE = 1000;
 
 interface UpsertReturningRow {
-  product_sku: string;
+  product_id: number;
   provider_branch_id: string;
   stock: number;
   reserved_stock: number | null;
@@ -32,10 +36,11 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     const qb = this.dataSource
       .getRepository(InventoryEntity)
       .createQueryBuilder('i')
+      .leftJoinAndSelect('i.product', 'product')
       .orderBy('i.id', 'ASC');
 
     if (filter.productSku)
-      qb.andWhere('i.product_sku = :sku', { sku: filter.productSku });
+      qb.andWhere('product.sku = :sku', { sku: filter.productSku });
     if (filter.providerBranchId !== undefined) {
       qb.andWhere('i.provider_branch_id = :branchId', {
         branchId: filter.providerBranchId,
@@ -54,7 +59,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
   private toListItem(r: InventoryEntity): InventoryListItem {
     return {
       id: r.id,
-      productSku: r.productSku,
+      productSku: r.product!.sku,
       providerSku: r.providerSku,
       providerBranchId: r.providerBranchId,
       stock: r.stock,
@@ -67,7 +72,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
   async findById(id: number): Promise<InventoryListItem | null> {
     const row = await this.dataSource
       .getRepository(InventoryEntity)
-      .findOne({ where: { id } });
+      .findOne({ where: { id }, relations: { product: true } });
     if (!row) return null;
     return this.toListItem(row);
   }
@@ -76,23 +81,31 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     productSku: string,
     providerBranchId: number,
   ): Promise<InventoryListItem | null> {
-    const row = await this.dataSource.getRepository(InventoryEntity).findOne({
-      where: { productSku, providerBranchId },
-    });
+    const row = await this.dataSource
+      .getRepository(InventoryEntity)
+      .createQueryBuilder('i')
+      .leftJoinAndSelect('i.product', 'product')
+      .where('product.sku = :productSku', { productSku })
+      .andWhere('i.provider_branch_id = :providerBranchId', {
+        providerBranchId,
+      })
+      .getOne();
     return row ? this.toListItem(row) : null;
   }
 
   async create(input: CreateInventoryInput): Promise<InventoryListItem> {
     try {
+      const productId = await this.requireProductId(input.productSku);
       const row = await this.dataSource.getRepository(InventoryEntity).save(
         this.dataSource.getRepository(InventoryEntity).create({
-          productSku: input.productSku,
+          productId,
           providerSku: input.providerSku,
           providerBranchId: input.providerBranchId,
           stock: input.stock ?? 0,
           reservedStock: input.reservedStock ?? 0,
         }),
       );
+      row.product = { id: productId, sku: input.productSku } as never;
       return this.toListItem(row);
     } catch (e) {
       if (
@@ -100,7 +113,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
         (e as { code?: string }).code === '23505'
       ) {
         throw new ConflictException(
-          'inventory row already exists for product_sku and branch',
+          'inventory row already exists for product_id and branch',
         );
       }
       throw e;
@@ -111,10 +124,11 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     const row = await this.dataSource
       .getRepository(InventoryEntity)
       .createQueryBuilder('i')
+      .innerJoin('i.product', 'product')
       .select('COALESCE(SUM(i.stock), 0)', 'totalStock')
       .addSelect('COALESCE(SUM(i.reserved_stock), 0)', 'totalReserved')
       .addSelect('COUNT(DISTINCT i.provider_branch_id)', 'branches')
-      .where('i.product_sku = :sku', { sku })
+      .where('product.sku = :sku', { sku })
       .getRawOne<{
         totalStock: string;
         totalReserved: string;
@@ -140,6 +154,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
       const row = await tx
         .getRepository(InventoryEntity)
         .createQueryBuilder('i')
+        .leftJoinAndSelect('i.product', 'product')
         .setLock('pessimistic_write')
         .where('i.id = :id', { id })
         .getOne();
@@ -148,7 +163,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
 
       const aggregate = Inventory.fromSnapshot({
         id: row.id,
-        productSku: row.productSku,
+        productSku: row.product!.sku,
         providerSku: row.providerSku,
         providerBranchId: row.providerBranchId,
         stock: row.stock,
@@ -169,6 +184,14 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     });
   }
 
+  private async requireProductId(sku: string): Promise<number> {
+    const rows = await this.dataSource.query<{ id: number }[]>(
+      'SELECT id FROM pim.product WHERE sku = $1',
+      [sku],
+    );
+    if (!rows[0]) throw new NotFoundException(`Product sku=${sku} not found`);
+    return Number(rows[0].id);
+  }
   async findExistingProductSkus(skus: string[]): Promise<Set<string>> {
     if (skus.length === 0) return new Set();
 
@@ -182,9 +205,22 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
   async bulkUpsertStock(rows: BulkStockRow[]): Promise<BulkUpsertResult> {
     if (rows.length === 0) return { written: 0, clamped: [] };
 
+    const productRows = await this.dataSource.query<
+      { id: number; sku: string }[]
+    >('SELECT id, sku FROM pim.product WHERE sku = ANY($1::text[])', [
+      [...new Set(rows.map((row) => row.productSku))],
+    ]);
+    const productIdBySku = new Map(
+      productRows.map((row) => [row.sku, Number(row.id)]),
+    );
+    const skuByProductId = new Map(
+      productRows.map((row) => [Number(row.id), row.sku]),
+    );
     const requested = new Map<string, number>();
     for (const row of rows) {
-      requested.set(`${row.productSku} ${row.providerBranchId}`, row.stock);
+      const productId = productIdBySku.get(row.productSku);
+      if (productId !== undefined)
+        requested.set(`${productId} ${row.providerBranchId}`, row.stock);
     }
 
     const clamped: ClampedStockRow[] = [];
@@ -197,11 +233,13 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
         written += returned.length;
 
         for (const row of returned) {
-          const productSku = row.product_sku;
+          const productSku = skuByProductId.get(Number(row.product_id))!;
           const providerBranchId = Number(row.provider_branch_id);
           const storedStock = Number(row.stock);
           const reservedStock = Number(row.reserved_stock ?? 0);
-          const feedStock = requested.get(`${productSku} ${providerBranchId}`);
+          const feedStock = requested.get(
+            `${row.product_id} ${providerBranchId}`,
+          );
 
           if (feedStock !== undefined && storedStock > feedStock) {
             clamped.push({
@@ -239,12 +277,14 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     // when the supplier reports fewer units than we have already reserved.
     // COALESCE because reserved_stock is nullable in the schema.
     return tx.query(
-      `INSERT INTO inventory.inventory AS inv (product_sku, provider_sku, provider_branch_id, stock)
-       VALUES ${tuples.join(', ')}
-       ON CONFLICT (product_sku, provider_branch_id) DO UPDATE
+      `INSERT INTO inventory.inventory AS inv (product_id, provider_sku, provider_branch_id, stock)
+       SELECT product.id, source.provider_sku, source.provider_branch_id, source.stock
+       FROM (VALUES ${tuples.join(', ')}) AS source(sku, provider_sku, provider_branch_id, stock)
+       JOIN pim.product AS product ON product.sku = source.sku
+       ON CONFLICT (product_id, provider_branch_id) DO UPDATE
          SET stock = GREATEST(EXCLUDED.stock, COALESCE(inv.reserved_stock, 0)),
              provider_sku = EXCLUDED.provider_sku
-       RETURNING product_sku, provider_branch_id, stock, reserved_stock`,
+       RETURNING product_id, provider_branch_id, stock, reserved_stock`,
       params,
     );
   }
@@ -262,7 +302,7 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
           SET stock = COALESCE(reserved_stock, 0)
         WHERE provider_branch_id = ANY($1::bigint[])
           AND stock > COALESCE(reserved_stock, 0)
-          AND NOT (product_sku = ANY($2::text[]))
+          AND NOT (product_id = ANY(SELECT id FROM pim.product WHERE sku = ANY($2::text[])))
         RETURNING id`,
       [branchIds, keepSkus],
     );

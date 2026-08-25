@@ -19,17 +19,39 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS integrations`);
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS utils`);
 
-    await queryRunner.query(`COMMENT ON SCHEMA pim           IS 'Product Information Management: producto, marca, categoría, departamento, color, dimensión, imagen, cross-reference.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA vehicles      IS 'Taxonomía vehicular: armadora, modelo, año, motorización.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA compatibility IS 'Compatibilidad SKU ↔ vehículo (qué refacción embona en qué auto).'`);
-    await queryRunner.query(`COMMENT ON SCHEMA suppliers     IS 'Proveedores, sucursales y vínculo con marcas.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA inventory     IS 'Stock por SKU y sucursal de proveedor.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA commerce      IS 'Configuración comercial: listas de precios, métodos de pago.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA orders        IS 'Órdenes de compra, items y pagos.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA sales         IS 'Ventas consolidadas (eCommerce, POS, etc.).'`);
-    await queryRunner.query(`COMMENT ON SCHEMA billing       IS 'Facturación electrónica (CFDI / SAT).'`);
-    await queryRunner.query(`COMMENT ON SCHEMA integrations  IS 'API clients, jobs de integración y logs.'`);
-    await queryRunner.query(`COMMENT ON SCHEMA utils         IS 'Funciones y helpers compartidos.'`);
+    await queryRunner.query(
+      `COMMENT ON SCHEMA pim           IS 'Product Information Management: producto, marca, categoría, departamento, color, dimensión, imagen, cross-reference.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA vehicles      IS 'Taxonomía vehicular: armadora, modelo, año, motorización.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA compatibility IS 'Compatibilidad SKU ↔ vehículo (qué refacción embona en qué auto).'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA suppliers     IS 'Proveedores, sucursales y vínculo con marcas.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA inventory     IS 'Stock por SKU y sucursal de proveedor.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA commerce      IS 'Configuración comercial: listas de precios, métodos de pago.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA orders        IS 'Órdenes de compra, items y pagos.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA sales         IS 'Ventas consolidadas (eCommerce, POS, etc.).'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA billing       IS 'Facturación electrónica (CFDI / SAT).'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA integrations  IS 'API clients, jobs de integración y logs.'`,
+    );
+    await queryRunner.query(
+      `COMMENT ON SCHEMA utils         IS 'Funciones y helpers compartidos.'`,
+    );
 
     // -----------------------------------------------------
     // HELPERS
@@ -84,10 +106,10 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE pim.brand_category (
         id            INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        brand_code    TEXT REFERENCES pim.brand(brand_code) ON UPDATE CASCADE,
-        category_code TEXT REFERENCES pim.category(code)    ON UPDATE CASCADE,
+        brand_id      INTEGER REFERENCES pim.brand(id) ON DELETE CASCADE,
+        category_id   INTEGER REFERENCES pim.category(id) ON DELETE CASCADE,
         is_active     BOOLEAN DEFAULT TRUE,
-        UNIQUE(brand_code, category_code)
+        UNIQUE(brand_id, category_id)
       )
     `);
 
@@ -211,7 +233,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE pim.product_dimension (
         id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        product_sku TEXT NOT NULL UNIQUE REFERENCES pim.product(sku) ON UPDATE CASCADE,
+        product_id  INTEGER NOT NULL UNIQUE REFERENCES pim.product(id) ON DELETE CASCADE,
         length      DOUBLE PRECISION,
         width       DOUBLE PRECISION NOT NULL,
         height      DOUBLE PRECISION,
@@ -222,7 +244,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE pim.products_image (
         id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        product_sku TEXT REFERENCES pim.product(sku) ON UPDATE CASCADE,
+        product_id  INTEGER REFERENCES pim.product(id) ON DELETE CASCADE,
         url         TEXT,
         created_at  TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
       )
@@ -230,20 +252,15 @@ export class InitialSchema1700000000000 implements MigrationInterface {
 
     await queryRunner.query(`
       CREATE TABLE pim.product_cross_references (
-        id                    BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        product_sku           TEXT NOT NULL
-          REFERENCES pim.product(sku) ON UPDATE CASCADE ON DELETE CASCADE,
-        product_brand         TEXT
-          REFERENCES pim.brand(brand_code) ON UPDATE CASCADE ON DELETE SET NULL,
-        reference_sku         TEXT
-          REFERENCES pim.product(sku) ON UPDATE CASCADE ON DELETE SET NULL,
-        reference_brand       TEXT
-          REFERENCES pim.brand(brand_code) ON UPDATE CASCADE ON DELETE SET NULL,
-        reference_product_sku TEXT
-          REFERENCES pim.product(sku) ON UPDATE CASCADE ON DELETE SET NULL,
-        provider_sku          TEXT,
-        created_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at            TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        id                   BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        product_id           INTEGER NOT NULL REFERENCES pim.product(id) ON DELETE CASCADE,
+        product_brand_id     INTEGER REFERENCES pim.brand(id) ON DELETE SET NULL,
+        reference_id         INTEGER REFERENCES pim.product(id) ON DELETE SET NULL,
+        reference_brand_id   INTEGER REFERENCES pim.brand(id) ON DELETE SET NULL,
+        reference_product_id INTEGER REFERENCES pim.product(id) ON DELETE SET NULL,
+        provider_sku         TEXT,
+        created_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at           TIMESTAMP WITH TIME ZONE DEFAULT NOW()
       )
     `);
 
@@ -263,7 +280,7 @@ export class InitialSchema1700000000000 implements MigrationInterface {
         id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
         code_model          TEXT UNIQUE,
         model_car           TEXT,
-        code_assembly_plant TEXT REFERENCES vehicles.assembly_plant(code) ON UPDATE CASCADE,
+        assembly_plant_id BIGINT REFERENCES vehicles.assembly_plant(id) ON DELETE SET NULL,
         created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
       )
     `);
@@ -289,9 +306,9 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE vehicles.model_car_motorization (
         id                INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-        model_car_code    TEXT REFERENCES vehicles.model_car(code_model)  ON UPDATE CASCADE,
-        motorization_code TEXT REFERENCES vehicles.motorization_car(code) ON UPDATE CASCADE,
-        UNIQUE(model_car_code, motorization_code)
+        model_car_id      BIGINT REFERENCES vehicles.model_car(id) ON DELETE CASCADE,
+        motorization_id   BIGINT REFERENCES vehicles.motorization_car(id) ON DELETE CASCADE,
+        UNIQUE(model_car_id, motorization_id)
       )
     `);
 
@@ -300,19 +317,14 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     // -----------------------------------------------------
     await queryRunner.query(`
       CREATE TABLE compatibility.compatibilities (
-        id                  BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-        sku                 TEXT NOT NULL
-          REFERENCES pim.product(sku)              ON UPDATE CASCADE ON DELETE CASCADE,
-        assembly_plant_code TEXT NOT NULL
-          REFERENCES vehicles.assembly_plant(code) ON UPDATE CASCADE ON DELETE RESTRICT,
-        model_code          TEXT NOT NULL
-          REFERENCES vehicles.model_car(code_model) ON UPDATE CASCADE ON DELETE RESTRICT,
-        year_code           TEXT NOT NULL
-          REFERENCES vehicles.year_car(code)        ON UPDATE CASCADE ON DELETE RESTRICT,
-        motorization_code   TEXT NOT NULL
-          REFERENCES vehicles.motorization_car(code) ON UPDATE CASCADE ON DELETE RESTRICT,
-        created_at          TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
-        UNIQUE(sku, assembly_plant_code, model_code, year_code, motorization_code)
+        id                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+        product_id        INTEGER NOT NULL REFERENCES pim.product(id) ON DELETE CASCADE,
+        assembly_plant_id BIGINT NOT NULL REFERENCES vehicles.assembly_plant(id) ON DELETE RESTRICT,
+        model_id          BIGINT NOT NULL REFERENCES vehicles.model_car(id) ON DELETE RESTRICT,
+        year_id           INTEGER NOT NULL REFERENCES vehicles.year_car(id) ON DELETE RESTRICT,
+        motorization_id   BIGINT NOT NULL REFERENCES vehicles.motorization_car(id) ON DELETE RESTRICT,
+        created_at        TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
+        UNIQUE(product_id, assembly_plant_id, model_id, year_id, motorization_id)
       )
     `);
 
@@ -322,14 +334,13 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`
       CREATE TABLE inventory.inventory (
         id                 SERIAL PRIMARY KEY,
-        product_sku        TEXT    NOT NULL
-          REFERENCES pim.product(sku) ON UPDATE CASCADE ON DELETE RESTRICT,
+        product_id         INTEGER NOT NULL REFERENCES pim.product(id) ON DELETE RESTRICT,
         provider_sku       TEXT    NOT NULL,
         provider_branch_id BIGINT  NOT NULL REFERENCES suppliers.provider_branch(id),
         stock              INTEGER NOT NULL DEFAULT 0,
         reserved_stock     INTEGER          DEFAULT 0,
         updated_at         TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        UNIQUE(product_sku, provider_branch_id)
+        UNIQUE(product_id, provider_branch_id)
       )
     `);
 
@@ -528,72 +539,180 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     // -----------------------------------------------------
     // INDEXES
     // -----------------------------------------------------
-    await queryRunner.query(`CREATE INDEX idx_product_sku             ON pim.product(sku)`);
-    await queryRunner.query(`CREATE INDEX idx_product_filter_brand    ON pim.product(brand_id)`);
-    await queryRunner.query(`CREATE INDEX idx_product_filter_category ON pim.product(category_id)`);
-    await queryRunner.query(`CREATE INDEX idx_product_filter_autopart ON pim.product(auto_part_type_id)`);
-    await queryRunner.query(`CREATE INDEX idx_product_filter_provider ON pim.product(provider_id)`);
-    await queryRunner.query(`CREATE INDEX idx_product_filter_prov_sku ON pim.product(provider_sku)`);
-    await queryRunner.query(`CREATE INDEX idx_product_color_product   ON pim.product_color(id_product)`);
-    await queryRunner.query(`CREATE INDEX idx_products_image_sku      ON pim.products_image(product_sku)`);
-    await queryRunner.query(`CREATE INDEX idx_pxref_product_sku       ON pim.product_cross_references(product_sku)`);
-    await queryRunner.query(`CREATE INDEX idx_pxref_reference_sku     ON pim.product_cross_references(reference_sku)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_product_sku             ON pim.product(sku)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_filter_brand    ON pim.product(brand_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_filter_category ON pim.product(category_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_filter_autopart ON pim.product(auto_part_type_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_filter_provider ON pim.product(provider_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_filter_prov_sku ON pim.product(provider_sku)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_product_color_product   ON pim.product_color(id_product)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_products_image_product  ON pim.products_image(product_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_pxref_product_id        ON pim.product_cross_references(product_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_pxref_reference_sku     ON pim.product_cross_references(reference_sku)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_model_car_code_model    ON vehicles.model_car(code_model)`);
-    await queryRunner.query(`CREATE INDEX idx_model_car_code_plant    ON vehicles.model_car(code_assembly_plant)`);
-    await queryRunner.query(`CREATE INDEX idx_model_car_created_at    ON vehicles.model_car(created_at)`);
-    await queryRunner.query(`CREATE INDEX idx_motorization_car_code   ON vehicles.motorization_car(code)`);
-    await queryRunner.query(`CREATE INDEX idx_mcm_motorization_code   ON vehicles.model_car_motorization(motorization_code)`);
-    await queryRunner.query(`CREATE INDEX idx_mcm_model_car_code      ON vehicles.model_car_motorization(model_car_code)`);
-    await queryRunner.query(`CREATE INDEX idx_mcm_composite           ON vehicles.model_car_motorization(motorization_code, model_car_code)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_model_car_code_model    ON vehicles.model_car(code_model)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_model_car_code_plant    ON vehicles.model_car(code_assembly_plant)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_model_car_created_at    ON vehicles.model_car(created_at)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_motorization_car_code   ON vehicles.motorization_car(code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_mcm_motorization_code   ON vehicles.model_car_motorization(motorization_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_mcm_model_car_code      ON vehicles.model_car_motorization(model_car_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_mcm_composite           ON vehicles.model_car_motorization(motorization_code, model_car_code)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_compat_sku               ON compatibility.compatibilities(sku)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_model_code        ON compatibility.compatibilities(model_code)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_year_code         ON compatibility.compatibilities(year_code)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_plant_code        ON compatibility.compatibilities(assembly_plant_code)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_motorization_code ON compatibility.compatibilities(motorization_code)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_model_year        ON compatibility.compatibilities(model_code, year_code)`);
-    await queryRunner.query(`CREATE INDEX idx_compat_sku_filters_code  ON compatibility.compatibilities(sku, model_code, year_code, assembly_plant_code, motorization_code) INCLUDE (id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_sku               ON compatibility.compatibilities(sku)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_model_code        ON compatibility.compatibilities(model_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_year_code         ON compatibility.compatibilities(year_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_plant_code        ON compatibility.compatibilities(assembly_plant_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_motorization_code ON compatibility.compatibilities(motorization_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_model_year        ON compatibility.compatibilities(model_code, year_code)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_compat_sku_filters_code  ON compatibility.compatibilities(sku, model_code, year_code, assembly_plant_code, motorization_code) INCLUDE (id)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_inventory_product_sku        ON inventory.inventory(product_sku)`);
-    await queryRunner.query(`CREATE INDEX idx_inventory_provider_sku       ON inventory.inventory(provider_sku)`);
-    await queryRunner.query(`CREATE INDEX idx_inventory_product_branch     ON inventory.inventory(product_sku, provider_branch_id)`);
-    await queryRunner.query(`CREATE INDEX idx_inventory_stock              ON inventory.inventory(product_sku, stock)`);
-    await queryRunner.query(`CREATE INDEX idx_inventory_provider_branch_id ON inventory.inventory(provider_branch_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_inventory_product_id         ON inventory.inventory(product_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_inventory_provider_sku       ON inventory.inventory(provider_sku)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_inventory_product_branch     ON inventory.inventory(product_id, provider_branch_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_inventory_stock              ON inventory.inventory(product_id, stock)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_inventory_provider_branch_id ON inventory.inventory(provider_branch_id)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_price_list_items_pl   ON commerce.price_list_items(price_list_id)`);
-    await queryRunner.query(`CREATE INDEX idx_price_list_items_prod ON commerce.price_list_items(product_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_price_list_items_pl   ON commerce.price_list_items(price_list_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_price_list_items_prod ON commerce.price_list_items(product_id)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_orders_customer       ON orders.orders(customer_id)`);
-    await queryRunner.query(`CREATE INDEX idx_orders_status         ON orders.orders(status)`);
-    await queryRunner.query(`CREATE INDEX idx_orders_placed_at      ON orders.orders(placed_at)`);
-    await queryRunner.query(`CREATE INDEX idx_order_items_order     ON orders.order_items(order_id)`);
-    await queryRunner.query(`CREATE INDEX idx_order_items_product   ON orders.order_items(product_id)`);
-    await queryRunner.query(`CREATE INDEX idx_order_payments_order  ON orders.order_payments(order_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_orders_customer       ON orders.orders(customer_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_orders_status         ON orders.orders(status)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_orders_placed_at      ON orders.orders(placed_at)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_order_items_order     ON orders.order_items(order_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_order_items_product   ON orders.order_items(product_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_order_payments_order  ON orders.order_payments(order_id)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_sales_customer ON sales.sales(customer_id)`);
-    await queryRunner.query(`CREATE INDEX idx_sales_sold_at  ON sales.sales(sold_at)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_sales_customer ON sales.sales(customer_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_sales_sold_at  ON sales.sales(sold_at)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_invoices_customer ON billing.invoices(customer_id)`);
-    await queryRunner.query(`CREATE INDEX idx_invoices_order    ON billing.invoices(order_id)`);
-    await queryRunner.query(`CREATE INDEX idx_invoices_sale     ON billing.invoices(sale_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_invoices_customer ON billing.invoices(customer_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_invoices_order    ON billing.invoices(order_id)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_invoices_sale     ON billing.invoices(sale_id)`,
+    );
 
-    await queryRunner.query(`CREATE INDEX idx_api_clients_api_key ON integrations.api_clients(api_key)`);
-    await queryRunner.query(`CREATE INDEX idx_import_job_logs_job ON integrations.import_job_logs(job_id)`);
+    await queryRunner.query(
+      `CREATE INDEX idx_api_clients_api_key ON integrations.api_clients(api_key)`,
+    );
+    await queryRunner.query(
+      `CREATE INDEX idx_import_job_logs_job ON integrations.import_job_logs(job_id)`,
+    );
 
     // -----------------------------------------------------
     // TRIGGERS (set_updated_at)
     // -----------------------------------------------------
-    await queryRunner.query(`CREATE TRIGGER trg_product_updated_at         BEFORE UPDATE ON pim.product                   FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_pxref_updated_at           BEFORE UPDATE ON pim.product_cross_references  FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_provider_branch_updated_at BEFORE UPDATE ON suppliers.provider_branch     FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_inventory_updated_at       BEFORE UPDATE ON inventory.inventory           FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_price_lists_updated_at     BEFORE UPDATE ON commerce.price_lists          FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_price_list_items_updated_at BEFORE UPDATE ON commerce.price_list_items    FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_orders_updated_at          BEFORE UPDATE ON orders.orders                 FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_sales_updated_at           BEFORE UPDATE ON sales.sales                   FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_invoices_updated_at        BEFORE UPDATE ON billing.invoices              FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
-    await queryRunner.query(`CREATE TRIGGER trg_api_clients_updated_at     BEFORE UPDATE ON integrations.api_clients      FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`);
+    await queryRunner.query(
+      `CREATE TRIGGER trg_product_updated_at         BEFORE UPDATE ON pim.product                   FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_pxref_updated_at           BEFORE UPDATE ON pim.product_cross_references  FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_provider_branch_updated_at BEFORE UPDATE ON suppliers.provider_branch     FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_inventory_updated_at       BEFORE UPDATE ON inventory.inventory           FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_price_lists_updated_at     BEFORE UPDATE ON commerce.price_lists          FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_price_list_items_updated_at BEFORE UPDATE ON commerce.price_list_items    FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_orders_updated_at          BEFORE UPDATE ON orders.orders                 FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_sales_updated_at           BEFORE UPDATE ON sales.sales                   FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_invoices_updated_at        BEFORE UPDATE ON billing.invoices              FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
+    await queryRunner.query(
+      `CREATE TRIGGER trg_api_clients_updated_at     BEFORE UPDATE ON integrations.api_clients      FOR EACH ROW EXECUTE FUNCTION utils.set_updated_at()`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
