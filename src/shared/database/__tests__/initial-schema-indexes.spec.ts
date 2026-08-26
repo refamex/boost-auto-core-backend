@@ -116,7 +116,7 @@ describe('InitialSchema is internally consistent', () => {
     // third of the file while the dangling-column checks below skip precisely
     // what went unparsed. Bump these deliberately when adding a table or index.
     expect(tables.size).toBe(34);
-    expect(indexes.length).toBe(38);
+    expect(indexes.length).toBe(36);
   });
 
   it('every indexed table is declared in the same file', () => {
@@ -156,7 +156,7 @@ describe('RestoreIdBasedIndexes matches the declared schema', () => {
   const indexes = indexReferences(repair);
 
   it('parses the repair migration at all', () => {
-    expect(indexes.length).toBe(12);
+    expect(indexes.length).toBe(10);
   });
 
   it('every column it indexes is declared by the initial schema', () => {
@@ -201,10 +201,17 @@ describe('RestoreIdBasedIndexes matches the declared schema', () => {
     expect(mismatched).toEqual([]);
   });
 
-  // The repair must cover every index whose LEADING column was renamed by the
-  // id migration, because CASCADE took exactly those out of production.
-  it('covers every index the id migration destroyed', () => {
-    const destroyed = [
+  // CASCADE removed every index whose leading column the id migration renamed.
+  // This asserts the ones we CHOSE to bring back — not all of them. Two were
+  // deliberately left out: one duplicates `UNIQUE(product_id,
+  // provider_branch_id)` column for column, the other is a leading-column
+  // prefix of it. `DropRedundantInventoryIndexes` removes
+  // those from databases old enough to still carry them. The test name says
+  // "intend to restore" rather than "destroyed" because those are now
+  // different sets, and a name that outruns its list is how this whole defect
+  // class starts.
+  it('restores exactly the indexes we intend to restore', () => {
+    const intended = [
       'idx_compat_vehicle_lookup',
       'idx_compat_year_id',
       'idx_compat_plant_id',
@@ -214,11 +221,20 @@ describe('RestoreIdBasedIndexes matches the declared schema', () => {
       'idx_pxref_product_id',
       'idx_pxref_reference_id',
       'idx_products_image_product',
-      'idx_inventory_product_id',
-      'idx_inventory_product_branch',
       'idx_inventory_stock',
     ];
 
-    expect(indexes.map((i) => i.name).sort()).toEqual([...destroyed].sort());
+    expect(indexes.map((i) => i.name).sort()).toEqual([...intended].sort());
+  });
+
+  // Deliberately absent. Subsumed by the exact-set check above and, on its
+  // own, this WOULD pass against an empty parse — Jest runs each `it`
+  // independently, so the count sibling failing does not fail this one. Kept
+  // because naming the two by hand reads better in a failure report.
+  it('does not restore the indexes the unique constraint already provides', () => {
+    const names = indexes.map((i) => i.name);
+
+    expect(names).not.toContain('idx_inventory_product_id');
+    expect(names).not.toContain('idx_inventory_product_branch');
   });
 });

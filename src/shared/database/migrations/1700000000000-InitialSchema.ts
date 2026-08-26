@@ -598,12 +598,11 @@ export class InitialSchema1700000000000 implements MigrationInterface {
       `CREATE INDEX idx_compat_motorization_id  ON compatibility.compatibilities(motorization_id)`,
     );
 
-    await queryRunner.query(
-      `CREATE INDEX idx_inventory_product_id         ON inventory.inventory(product_id)`,
-    );
-    await queryRunner.query(
-      `CREATE INDEX idx_inventory_product_branch     ON inventory.inventory(product_id, provider_branch_id)`,
-    );
+    // No `idx_inventory_product_id` and no `idx_inventory_product_branch`:
+    // this table's `UNIQUE(product_id, provider_branch_id)` is already a btree
+    // over those columns, so one duplicates it exactly and the other is a
+    // leading-column prefix of it. `DropRedundantInventoryIndexes` removes
+    // them from databases that were built before this line changed.
     await queryRunner.query(
       `CREATE INDEX idx_inventory_stock              ON inventory.inventory(product_id, stock)`,
     );
