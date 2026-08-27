@@ -55,6 +55,20 @@ export interface NotificationsConfig {
   mailFrom: string;
 }
 
+export interface TaxConfig {
+  /**
+   * Fraction, not percent: 0.16 is 16%. Applied server-side to every order and
+   * quote line — the caller no longer supplies a tax amount.
+   *
+   * Deliberately a single rate. Mexico's 8% northern/southern border IVA is a
+   * fiscal stimulus tied to the ISSUER's domicilio fiscal and padrón
+   * registration, not to where a parcel is shipped, so resolving it from the
+   * destination postal code would be wrong. Zone rates and exempt products need
+   * an accounting rule before they need a table.
+   */
+  rate: number;
+}
+
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
   port: number;
@@ -74,6 +88,7 @@ export interface AppConfig {
     issuer: string;
     audience: string;
   };
+  tax: TaxConfig;
   polar: PolarConfig;
   skydropx: SkydropxConfig;
   roughCountry: RoughCountryConfig;
@@ -104,6 +119,9 @@ export default (): AppConfig => ({
     publicKey: process.env.JWT_PUBLIC_KEY,
     issuer: process.env.JWT_ISSUER ?? 'autoboost-auth',
     audience: process.env.JWT_AUDIENCE ?? 'autoboost-core',
+  },
+  tax: {
+    rate: Number.parseFloat(process.env.TAX_RATE ?? '0.16'),
   },
   polar: {
     enabled: process.env.POLAR_ENABLED === 'true',

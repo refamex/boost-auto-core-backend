@@ -7,11 +7,13 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { plainToInstance } from 'class-transformer';
 import { validateOrReject } from 'class-validator';
 import { DataSource, FindOptionsWhere, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { AppConfig } from '../../../../shared/config/configuration';
 import {
   PaginatedResult,
   paginated,
@@ -20,6 +22,7 @@ import { PriceListItemService } from '../../../commerce/application/services/pri
 import { PriceListService } from '../../../commerce/application/services/price-list.service';
 import { PriceListEntity } from '../../../commerce/domain/entities/price-list.entity';
 import { OrderService } from '../../../orders/application/services/order.service';
+import { priceLine, round2 } from '../../../orders/domain/order-pricing';
 import { CreateOrderDto } from '../../../orders/infrastructure/http/dto/order.dto';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
 import { QuoteItemEntity } from '../../domain/entities/quote-item.entity';
@@ -60,6 +63,7 @@ export class QuoteService {
     private readonly priceLists: PriceListService,
     private readonly priceListItems: PriceListItemService,
     private readonly orders: OrderService,
+    private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   async list(
@@ -116,7 +120,7 @@ export class QuoteService {
           notes: dto.notes,
           subtotal,
           taxTotal,
-          grandTotal: subtotal + taxTotal,
+          grandTotal: round2(subtotal + taxTotal),
         }),
       );
 
@@ -175,7 +179,7 @@ export class QuoteService {
         );
         existing.subtotal = subtotal;
         existing.taxTotal = taxTotal;
-        existing.grandTotal = subtotal + taxTotal;
+        existing.grandTotal = round2(subtotal + taxTotal);
       }
 
       existing.priceListId = priceList.id;
@@ -362,6 +366,8 @@ export class QuoteService {
     let taxTotal = 0;
     const items: Partial<QuoteItemEntity>[] = [];
 
+    const taxRate = this.config.get('tax.rate', { infer: true });
+
     for (const line of lines) {
       const product = products.get(line.productId)!;
       const priced = await this.resolvePrice(
@@ -371,10 +377,16 @@ export class QuoteService {
         now,
       );
 
-      const tax = line.tax ?? 0;
-      const lineTotal = line.qty * priced.price + tax;
-      subtotal += line.qty * priced.price;
-      taxTotal += tax;
+      // Tax is computed, never echoed from the request. A rep could otherwise
+      // quote tax 0, approve it, and convert it into an order that carries the
+      // snapshot — reopening from inside the hole `create` closes at the edge.
+      const { net, tax, lineTotal } = priceLine({
+        qty: line.qty,
+        unitPrice: priced.price,
+        taxRate,
+      });
+      subtotal = round2(subtotal + net);
+      taxTotal = round2(taxTotal + tax);
 
       items.push({
         productId: line.productId,

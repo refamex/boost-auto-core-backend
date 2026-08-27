@@ -25,13 +25,35 @@ export class CreateOrderItemDto {
   @Type(() => Number)
   qty!: number;
 
-  @ApiProperty()
+  /**
+   * The price the caller BELIEVES applies — an assertion to verify, never the
+   * price charged. The server resolves the real one from the price list (or
+   * `pim.product.price`) and rejects the order with 409 if this disagrees by
+   * more than a cent, so a stale cart is told to refresh instead of being
+   * silently charged an amount it never displayed.
+   *
+   * Optional, and safe to stop sending.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Client-asserted unit price. Verified against the server price; a mismatch is rejected with 409. Never used to compute totals.',
+  })
   @IsNumber()
   @Min(0)
+  @IsOptional()
   @Type(() => Number)
-  unitPrice!: number;
+  unitPrice?: number;
 
-  @ApiPropertyOptional({ default: 0 })
+  /**
+   * @deprecated Accepted and IGNORED. Tax is computed server-side from
+   * `TAX_RATE`. Still accepted only because the global ValidationPipe runs
+   * `forbidNonWhitelisted`, so removing the field would 400 every checkout from
+   * a storefront that has not deployed yet. Delete once no client sends it.
+   */
+  @ApiPropertyOptional({
+    deprecated: true,
+    description: 'Ignored. Tax is computed server-side.',
+  })
   @IsNumber()
   @Min(0)
   @IsOptional()
@@ -59,6 +81,16 @@ export class CreateOrderDto {
   @IsString()
   @IsOptional()
   status?: string;
+
+  /**
+   * Price list to quote against. Omitted means the default list; a code that
+   * does not exist is a 404 rather than a silent fallback. When no list covers
+   * a product, its `pim.product.price` is used.
+   */
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  priceListCode?: string;
 
   /**
    * Contact for this order. Frozen at creation so webhooks and scheduled jobs —

@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
@@ -20,6 +21,7 @@ import { QuoteService } from './quote.service';
 const CUSTOMER_ID = '11111111-1111-4111-8111-111111111111';
 const REP_ID = '22222222-2222-4222-8222-222222222222';
 const QUOTE_ID = '33333333-3333-4333-8333-333333333333';
+const TAX_RATE = 0.16;
 
 const rep: AuthenticatedUser = {
   id: 'rep-user',
@@ -105,6 +107,7 @@ describe('QuoteService', () => {
   const priceLists = { findApplicable: jest.fn(), findById: jest.fn() };
   const priceListItems = { resolveApplicablePrice: jest.fn() };
   const orders = { create: jest.fn(), createInternal: jest.fn() };
+  const config = { get: jest.fn(() => TAX_RATE) };
 
   // Jest hands mock arguments back as `any`; narrow them once here instead of
   // sprinkling casts through the assertions.
@@ -145,6 +148,7 @@ describe('QuoteService', () => {
         { provide: PriceListService, useValue: priceLists },
         { provide: PriceListItemService, useValue: priceListItems },
         { provide: OrderService, useValue: orders },
+        { provide: ConfigService, useValue: config },
       ],
     }).compile();
     service = moduleRef.get(QuoteService);
@@ -179,18 +183,35 @@ describe('QuoteService', () => {
       });
     });
 
-    it('totals qty * resolved price plus the line tax', async () => {
-      await service.create(rep, {
-        ...createDto,
-        items: [{ productId: 42, qty: 10, tax: 2000 }],
-      });
+    it('totals qty * resolved price plus server-computed tax', async () => {
+      await service.create(rep, createDto);
       expect(quoteTxRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           subtotal: 12500,
-          taxTotal: 2000,
+          taxTotal: 2000, // 12500 * 0.16
           grandTotal: 14500,
         }),
       );
+    });
+
+    // A rep could otherwise quote tax 0, get it approved, and convert it into
+    // an order carrying that snapshot — reopening the order hole from inside.
+    it('ignores a tax amount in the request and computes its own', async () => {
+      await service.create(rep, {
+        ...createDto,
+        items: [{ productId: 42, qty: 10, tax: 0 }],
+      });
+      expect(savedQuoteItems()[0]).toMatchObject({ taxSnapshot: 2000 });
+      expect(quoteTxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ taxTotal: 2000, grandTotal: 14500 }),
+      );
+    });
+
+    it('reads the rate from config rather than hardcoding one', async () => {
+      config.get.mockReturnValue(0.08);
+      await service.create(rep, createDto);
+      expect(savedQuoteItems()[0]).toMatchObject({ taxSnapshot: 1000 });
+      config.get.mockReturnValue(TAX_RATE);
     });
 
     it('starts as a draft owned by the calling rep', async () => {
