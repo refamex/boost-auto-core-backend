@@ -1,5 +1,9 @@
 import 'reflect-metadata';
-import { ExecutionContext, ForbiddenException, RequestMethod } from '@nestjs/common';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  RequestMethod,
+} from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
@@ -21,6 +25,11 @@ type Handler = (...args: any[]) => unknown;
 const handlerOf = (name: string): Handler =>
   (QuoteController.prototype as unknown as Record<string, Handler>)[name];
 
+/** `Reflect.getMetadata` is typed `any`; narrow it once, here. */
+function metadataOf<T>(key: string, name: string): T | undefined {
+  return Reflect.getMetadata(key, handlerOf(name)) as T | undefined;
+}
+
 function contextFor(name: string, user: AuthenticatedUser): ExecutionContext {
   return {
     getHandler: () => handlerOf(name),
@@ -34,17 +43,15 @@ const routeMethods = (): string[] =>
   Object.getOwnPropertyNames(QuoteController.prototype).filter(
     (name) =>
       name !== 'constructor' &&
-      Reflect.getMetadata(PATH_METADATA, handlerOf(name)) !== undefined,
+      metadataOf<string>(PATH_METADATA, name) !== undefined,
   );
 
 const getRoutePaths = (): string[] =>
   routeMethods()
     .filter(
-      (name) =>
-        Reflect.getMetadata(METHOD_METADATA, handlerOf(name)) ===
-        RequestMethod.GET,
+      (name) => metadataOf<number>(METHOD_METADATA, name) === RequestMethod.GET,
     )
-    .map((name) => Reflect.getMetadata(PATH_METADATA, handlerOf(name)));
+    .map((name) => metadataOf<string>(PATH_METADATA, name) ?? '');
 
 describe('QuoteController — customer access', () => {
   const guard = new RolesGuard(new Reflector());
@@ -77,7 +84,9 @@ describe('QuoteController — customer access', () => {
   describe('routing', () => {
     it('admits a customer on both me routes', () => {
       expect(guard.canActivate(contextFor('listMine', customer))).toBe(true);
-      expect(guard.canActivate(contextFor('findMineById', customer))).toBe(true);
+      expect(guard.canActivate(contextFor('findMineById', customer))).toBe(
+        true,
+      );
     });
 
     it('declares the me routes before the bare :id route', () => {
@@ -92,24 +101,31 @@ describe('QuoteController — customer access', () => {
   });
 
   describe('delegation', () => {
-    const svc = {
-      list: jest.fn(),
-      findById: jest.fn(),
-    } as unknown as jest.Mocked<QuoteService>;
-    const controller = new QuoteController(svc);
+    // Held as standalone mocks rather than read back off the service object:
+    // `expect(svc.list)` passes an unbound method reference around, which is
+    // exactly what @typescript-eslint/unbound-method exists to catch.
+    const list = jest.fn();
+    const findById = jest.fn();
+    const controller = new QuoteController({
+      list,
+      findById,
+    } as unknown as QuoteService);
 
-    beforeEach(() => jest.clearAllMocks());
+    beforeEach(() => {
+      list.mockReset();
+      findById.mockReset();
+    });
 
     it('passes the caller straight through to list', async () => {
       const query = { page: 1, limit: 20 } as QuoteQueryDto;
       await controller.listMine(customer, query);
       // Ownership scoping is the service's job (buildWhere), not the route's.
-      expect(svc.list).toHaveBeenCalledWith(customer, query);
+      expect(list).toHaveBeenCalledWith(customer, query);
     });
 
     it('passes the caller straight through to findById', async () => {
       await controller.findMineById(QUOTE_ID, customer);
-      expect(svc.findById).toHaveBeenCalledWith(QUOTE_ID, customer);
+      expect(findById).toHaveBeenCalledWith(QUOTE_ID, customer);
     });
   });
 });
