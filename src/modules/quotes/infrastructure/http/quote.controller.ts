@@ -28,6 +28,37 @@ export class QuoteController {
     return this.svc.list(user, query);
   }
 
+  /**
+   * Customer-facing reads, declared before every `:id` route below because
+   * Nest matches in declaration order — `:id` first would swallow `me`.
+   *
+   * Deliberately ungated, mirroring `InvoiceController`: the macro role
+   * `customer` grants neither `quotes:read` nor anything else quotes-related,
+   * so `@Roles('quotes:read')` on the staff routes above 403s a customer
+   * before ownership is ever evaluated. Granting `quotes:read` to `customer`
+   * instead would ALSO open the unfiltered staff route, which is the thing
+   * these two routes exist to avoid.
+   *
+   * No extra scoping lives here: `QuoteService` already narrows a caller who
+   * is neither admin nor rep to their own quotes, and only once sent
+   * (`quote-visibility.ts::buildWhere`).
+   */
+  @Get('me')
+  listMine(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: QuoteQueryDto,
+  ) {
+    return this.svc.list(user, query);
+  }
+
+  @Get('me/:id')
+  findMineById(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.svc.findById(id, user);
+  }
+
   @Post()
   @Roles('quotes:write')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateQuoteDto) {
