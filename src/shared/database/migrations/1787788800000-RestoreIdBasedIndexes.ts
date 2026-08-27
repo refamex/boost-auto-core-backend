@@ -15,25 +15,47 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   dependent index with them. This migration is the only thing that reaches
  *   it.
  *
- * Hence twelve names, not seven: the five below marked "prod-only" already read
+ * Hence ten names, not seven: the three below marked "prod-only" already read
  * as corrected in `InitialSchema`, which is exactly why nobody noticed
- * production does not have them. `idx_inventory_product_id` is the costly one —
- * `zeroOutMissing` filters `product_id = ANY(...)` against a table the stock
- * sync rewrites twice a day.
+ * production does not have them.
  *
- * `IF NOT EXISTS` is what lets one migration serve both: a verified no-op on
- * fresh, a full repair on production.
+ * `IF NOT EXISTS` is what lets one migration serve both: a no-op on fresh, a
+ * full repair on production.
+ *
+ * LOCK COST, and why there is no `CONCURRENTLY` here.
+ *
+ * Every statement below is a plain `CREATE INDEX`, which takes a SHARE lock
+ * that blocks writes to its table while the index builds. The runner holds
+ * them all together: `migrationsTransactionMode` is unset in `data-source.ts`,
+ * so TypeORM's default of `"all"` wraps the ENTIRE pending chain in one
+ * transaction, and no lock is released until the last migration commits.
+ *
+ * `CONCURRENTLY` cannot run inside a transaction block, and a per-migration
+ * `transaction = false` is NOT an escape: under mode `"all"` TypeORM raises
+ * `ForbiddenTransactionModeOverrideError` and aborts the whole chain rather
+ * than running that one migration outside it. The only real lever is setting
+ * `migrationsTransactionMode: 'each'` on the DataSource, which changes
+ * atomicity for EVERY migration — a failure mid-chain would then leave the
+ * earlier ones committed instead of rolling back.
+ *
+ * Not worth that trade at current size. These tables are in the tens of
+ * thousands of rows, where each build is milliseconds and the whole window is
+ * under a second. Revisit when any table here passes roughly a million rows,
+ * or when a deploy can no longer tolerate seconds of blocked writes.
  *
  * No defensive `DROP INDEX` for the dead code-based names: `ForeignKeysById`
  * runs earlier in the chain and already removed them everywhere, including on a
  * half-migrated staging database.
  *
  * ASYMMETRY IN `down()`, deliberate: it is a true inverse on production, where
- * `up()` created all twelve. On a fresh database `InitialSchema` owns them and
- * `up()` was a no-op, so reverting drops indexes this migration never made,
- * while the migrations table still shows `InitialSchema` applied. Only a full
- * `pnpm db:reset` restores that. Acceptable because reverting is a dev-only
- * operation, but it would surprise someone unwritten.
+ * `up()` created all ten. On a fresh database `InitialSchema` owns them and
+ * `up()` did nothing, so reverting drops indexes this migration never made,
+ * while the migrations table still shows `InitialSchema` applied. Re-running
+ * the chain does restore them, because `up()` recreates all ten
+ * unconditionally — but NOTHING ASSERTS THAT. No test in this repository
+ * reverts this migration, so treat the recovery path as reasoned, not proven.
+ * Acceptable because reverting is a dev-only operation, but it would surprise
+ * someone unwritten.
  */
 export class RestoreIdBasedIndexes1787788800000 implements MigrationInterface {
   name = 'RestoreIdBasedIndexes1787788800000';
@@ -106,16 +128,11 @@ export class RestoreIdBasedIndexes1787788800000 implements MigrationInterface {
       name: 'idx_products_image_product',
       ddl: 'CREATE INDEX IF NOT EXISTS idx_products_image_product ON pim.products_image(product_id)',
     },
-    {
-      schema: 'inventory',
-      name: 'idx_inventory_product_id',
-      ddl: 'CREATE INDEX IF NOT EXISTS idx_inventory_product_id ON inventory.inventory(product_id)',
-    },
-    {
-      schema: 'inventory',
-      name: 'idx_inventory_product_branch',
-      ddl: 'CREATE INDEX IF NOT EXISTS idx_inventory_product_branch ON inventory.inventory(product_id, provider_branch_id)',
-    },
+    // No `idx_inventory_product_id`, no `idx_inventory_product_branch`: the
+    // same reasoning applied to `compatibility` above. `UNIQUE(product_id,
+    // provider_branch_id)` already indexes both shapes, so restoring them
+    // would only add write cost. See `DropRedundantInventoryIndexes`, which
+    // removes them where an earlier version of this file already put them.
     {
       schema: 'inventory',
       name: 'idx_inventory_stock',

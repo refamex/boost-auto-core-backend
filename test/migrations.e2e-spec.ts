@@ -3,6 +3,8 @@ import {
   StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import { DataSource } from 'typeorm';
+import { RestoreIdBasedIndexes1787788800000 } from '../src/shared/database/migrations/1787788800000-RestoreIdBasedIndexes';
+import { DropRedundantInventoryIndexes1787875200000 } from '../src/shared/database/migrations/1787875200000-DropRedundantInventoryIndexes';
 import { describeWithDocker } from './docker-gate';
 
 /**
@@ -26,20 +28,30 @@ import { describeWithDocker } from './docker-gate';
  * skip under CI and fails the run instead.
  */
 
-/** Every index the id migration destroyed, restored by the repair migration. */
+/** The subset of destroyed indexes we chose to restore. NOT all of them. */
 const RESTORED_INDEXES = [
   'idx_compat_motorization_id',
   'idx_compat_plant_id',
   'idx_compat_vehicle_lookup',
   'idx_compat_year_id',
-  'idx_inventory_product_branch',
-  'idx_inventory_product_id',
   'idx_inventory_stock',
   'idx_mcm_motorization_model',
   'idx_model_car_plant_id',
   'idx_products_image_product',
   'idx_pxref_product_id',
   'idx_pxref_reference_id',
+];
+
+/**
+ * Destroyed by CASCADE like the rest, then deliberately NOT restored:
+ * `UNIQUE(product_id, provider_branch_id)` on `inventory.inventory` is already
+ * a btree over those columns, so one of these duplicates it exactly and the
+ * other is a leading-column prefix of it. `DropRedundantInventoryIndexes`
+ * removes them from databases old enough to still carry them.
+ */
+const REDUNDANT_INDEXES = [
+  'idx_inventory_product_branch',
+  'idx_inventory_product_id',
 ];
 
 /** The code-based names the id migration dropped. None may come back. */
@@ -58,7 +70,7 @@ const DEAD_INDEXES = [
   'idx_pxref_reference_sku',
 ];
 
-/** The migration under test, by identity — `undoLastMigration` is positional. */
+/** Named, not positional: the ledger row below is deleted by this identity. */
 const REPAIR_MIGRATION = 'RestoreIdBasedIndexes1787788800000';
 
 describeWithDocker('migration chain', () => {
@@ -105,13 +117,6 @@ describeWithDocker('migration chain', () => {
     await dataSource.initialize();
   });
 
-  const lastAppliedMigration = async (): Promise<string> => {
-    const [row] = await dataSource.query<Array<{ name: string }>>(
-      `SELECT name FROM migrations ORDER BY id DESC LIMIT 1`,
-    );
-    return row.name;
-  };
-
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
     if (container) await container.stop();
@@ -127,6 +132,10 @@ describeWithDocker('migration chain', () => {
 
     for (const name of RESTORED_INDEXES) expect(present).toContain(name);
     for (const name of DEAD_INDEXES) expect(present).not.toContain(name);
+    // Weak on its own: after this change nothing in the chain can create these
+    // two, so absence here is guaranteed rather than observed. The round-trip
+    // test below is what actually proves the drop migration does the work.
+    for (const name of REDUNDANT_INDEXES) expect(present).not.toContain(name);
   });
 
   // Pins InitialSchema's own statement. On this fresh database the index came
@@ -154,16 +163,23 @@ describeWithDocker('migration chain', () => {
       await dataSource.query(`DROP INDEX IF EXISTS
         ${name.startsWith('idx_compat') ? 'compatibility' : name.startsWith('idx_mcm') || name.startsWith('idx_model_car') ? 'vehicles' : name.startsWith('idx_inventory') ? 'inventory' : 'pim'}.${name}`);
     }
-    // All twelve, not merely "something changed": a name that stopped matching
+    // All of them, not merely "something changed": a name that stopped matching
     // its schema prefix would drop nothing and still satisfy a loose check.
     const deficit = await indexDefs();
     expect(fresh.length - deficit.length).toBe(RESTORED_INDEXES.length);
 
-    // undoLastMigration is positional. Pin the identity so a future migration
-    // with a higher timestamp fails loudly instead of silently retargeting.
-    await expect(lastAppliedMigration()).resolves.toBe(REPAIR_MIGRATION);
-    await dataSource.undoLastMigration();
-    await dataSource.runMigrations();
+    // Drive the repair BY IDENTITY. `undoLastMigration` is positional, and it
+    // stopped pointing here the moment `DropRedundantInventoryIndexes` was
+    // appended — the same trap that let `customers-constraints` assert against
+    // a schema it had never dropped. This runs the same forward BODY production
+    // runs, though not through the runner: no ledger write, no wrapping
+    // transaction.
+    const runner = dataSource.createQueryRunner();
+    try {
+      await new RestoreIdBasedIndexes1787788800000().up(runner);
+    } finally {
+      await runner.release();
+    }
 
     // DEFINITIONS. This is the assertion that makes the two levers provably
     // equivalent: everything below now exists because the REPAIR migration
@@ -171,7 +187,7 @@ describeWithDocker('migration chain', () => {
     expect(await indexDefs()).toEqual(fresh);
   });
 
-  // Declared AFTER convergence on purpose — only here were the twelve created
+  // Declared AFTER convergence on purpose — only there were these created
   // by the repair migration. Redundant with the snapshot equality above by
   // design: it names the one property the vehicle-search direction depends on,
   // so losing it reads as a failure about covering indexes, not a diff dump.
@@ -186,13 +202,42 @@ describeWithDocker('migration chain', () => {
     expect(row.indexdef).toContain('INCLUDE (product_id)');
   });
 
+  // The drop migration's ONLY effective population is production-after-repair,
+  // and no fresh-database assertion can observe it: after this change nothing
+  // in the chain creates these two, so they are absent whether `up()` drops
+  // them or does nothing at all. Build that population by hand instead.
+  //
+  // `down()` is what creates them, so this exercises BOTH directions — the
+  // only place either is executed. Without it, emptying `up()`, misqualifying
+  // its schema, or deleting the migration outright all keep the suite green.
+  it('drops the redundant indexes, and puts them back on revert', async () => {
+    const migration = new DropRedundantInventoryIndexes1787875200000();
+    const runner = dataSource.createQueryRunner();
+
+    try {
+      await migration.down(runner);
+
+      // Positive first, so the absence assertion below cannot pass vacuously:
+      // this is the fixture where those names demonstrably CAN appear.
+      const reverted = (await indexDefs()).map(([name]) => name);
+      for (const name of REDUNDANT_INDEXES) expect(reverted).toContain(name);
+
+      await migration.up(runner);
+    } finally {
+      await runner.release();
+    }
+
+    const after = (await indexDefs()).map(([name]) => name);
+    for (const name of REDUNDANT_INDEXES) expect(after).not.toContain(name);
+  });
+
   // Proves the IF NOT EXISTS guards hold where the indexes already exist.
   //
-  // Reverting first would DROP all twelve and recreate them from absent — the
-  // path convergence already covers, and one that passes with both migration
-  // bodies empty. Clearing the ledger row instead leaves the indexes in place,
-  // so `up()` runs against a database that already has them: without the
-  // guards this throws `relation already exists`.
+  // Clearing the ledger row BY NAME leaves the indexes in place, so `up()`
+  // runs against a database that already has them: without the guards this
+  // throws `relation already exists`. Reverting instead would drop and
+  // recreate from absent — the path convergence already covers, and one that
+  // passes with the migration body empty.
   it('is idempotent when every index is already present', async () => {
     const before = await indexDefs();
 
