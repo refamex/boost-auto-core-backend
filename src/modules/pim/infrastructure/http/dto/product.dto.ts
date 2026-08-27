@@ -122,6 +122,39 @@ export class ProductQueryDto extends PaginationDto {
   isVisible?: boolean;
 }
 
+// -------- Vehicle Product Search (Phase 4) --------
+export class VehicleProductQueryDto extends PaginationDto {
+  @ApiPropertyOptional({ description: 'Model ID (vehicles.model_car.id)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  modelId?: number;
+
+  @ApiPropertyOptional({ description: 'Year ID (vehicles.year_car.id)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  yearId?: number;
+
+  @ApiPropertyOptional({ description: 'Assembly Plant ID (vehicles.assembly_plant.id)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  assemblyPlantId?: number;
+
+  @ApiPropertyOptional({ description: 'Motorization ID (vehicles.motorization_car.id)' })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  motorizationId?: number;
+
+  @ApiPropertyOptional({ description: 'Filter by visible products only' })
+  @IsOptional()
+  @Type(() => Boolean)
+  @IsBoolean()
+  isVisible?: boolean;
+}
+
 // -------- Product Dimension --------
 export class UpsertProductDimensionDto {
   @ApiProperty()

@@ -10,6 +10,7 @@ import {
   CreateProductDto,
   ProductQueryDto,
   UpdateProductDto,
+  VehicleProductQueryDto,
 } from '../../infrastructure/http/dto/product.dto';
 
 @Injectable()
@@ -70,6 +71,52 @@ export class ProductService {
     });
     if (!found) throw new NotFoundException(`Product sku=${sku} not found`);
     return found;
+  }
+
+  async findProductsByVehicle(
+    query: VehicleProductQueryDto,
+  ): Promise<PaginatedResult<ProductEntity>> {
+    const qb = this.repo
+      .createQueryBuilder('p')
+      .innerJoin(
+        'compatibility.compatibilities',
+        'c',
+        'c.product_id = p.id',
+      )
+      .leftJoinAndSelect('p.brand', 'brand')
+      .leftJoinAndSelect('p.category', 'category')
+      .leftJoinAndSelect('p.autoPartType', 'autoPart')
+      .orderBy('p.id', 'DESC');
+
+    // Vehicle filters
+    if (query.modelId !== undefined) {
+      qb.andWhere('c.model_id = :modelId', { modelId: query.modelId });
+    }
+    if (query.yearId !== undefined) {
+      qb.andWhere('c.year_id = :yearId', { yearId: query.yearId });
+    }
+    if (query.assemblyPlantId !== undefined) {
+      qb.andWhere('c.assembly_plant_id = :assemblyPlantId', {
+        assemblyPlantId: query.assemblyPlantId,
+      });
+    }
+    if (query.motorizationId !== undefined) {
+      qb.andWhere('c.motorization_id = :motorizationId', {
+        motorizationId: query.motorizationId,
+      });
+    }
+
+    // Product visibility filter
+    if (query.isVisible !== undefined) {
+      qb.andWhere('p.is_visible = :isVisible', { isVisible: query.isVisible });
+    }
+
+    // Ensure distinct products (a product may match multiple compatibility rows)
+    qb.distinct(true);
+
+    qb.skip(query.skip).take(query.limit);
+    const [items, total] = await qb.getManyAndCount();
+    return paginated(items, total, query);
   }
 
   create(dto: CreateProductDto): Promise<ProductEntity> {

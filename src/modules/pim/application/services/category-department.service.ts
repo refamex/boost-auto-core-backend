@@ -1,9 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  paginated,
+  PaginatedResult,
+} from '../../../../shared/common/pagination/pagination.dto';
 import { CategoryDepartmentEntity } from '../../domain/entities/category-department.entity';
 import {
   CreateCategoryDepartmentDto,
+  DepartmentQueryDto,
   UpdateCategoryDepartmentDto,
 } from '../../infrastructure/http/dto/category-department.dto';
 
@@ -14,8 +19,22 @@ export class CategoryDepartmentService {
     private readonly repo: Repository<CategoryDepartmentEntity>,
   ) {}
 
-  list() {
-    return this.repo.find({ order: { code: 'ASC' } });
+  async list(
+    query: DepartmentQueryDto,
+  ): Promise<PaginatedResult<CategoryDepartmentEntity>> {
+    const where: Record<string, unknown> = {};
+    if (query.isActive !== undefined) {
+      where.isActive = query.isActive;
+    }
+
+    const [items, total] = await this.repo.findAndCount({
+      where,
+      order: { code: 'ASC' },
+      skip: query.skip,
+      take: query.limit,
+    });
+
+    return paginated(items, total, query);
   }
 
   async findById(id: number): Promise<CategoryDepartmentEntity> {
@@ -39,8 +58,12 @@ export class CategoryDepartmentService {
     return this.repo.save(this.repo.merge(existing, dto));
   }
 
+  /**
+   * Soft delete: marks department as inactive instead of physical deletion.
+   * Phase 6: prevents data loss and maintains referential integrity.
+   */
   async remove(id: number): Promise<void> {
     const existing = await this.findById(id);
-    await this.repo.remove(existing);
+    await this.repo.save({ ...existing, isActive: false });
   }
 }

@@ -12,9 +12,11 @@ import {
   ROUGH_COUNTRY_SOURCE_SYSTEM,
   RoughCountryStockSyncService,
 } from './rough-country-stock-sync.service';
+import { NotificationService } from '../../../notifications/application/services/notification.service';
 
 const NV_BRANCH = 2;
 const TN_BRANCH = 1;
+const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
 
 interface LoggedPayload {
   level?: string;
@@ -41,6 +43,8 @@ describe('RoughCountryStockSyncService', () => {
   const lock = { tryAcquire: jest.fn(), release: jest.fn() };
 
   const config = { get: jest.fn() };
+
+  const notifications = { create: jest.fn() };
 
   let service: RoughCountryStockSyncService;
 
@@ -84,6 +88,7 @@ describe('RoughCountryStockSyncService', () => {
         { provide: INVENTORY_REPOSITORY, useValue: inventoryRepo },
         { provide: ImportJobService, useValue: importJobs },
         { provide: SYNC_LOCK, useValue: lock },
+        { provide: NotificationService, useValue: notifications },
       ],
     }).compile();
 
@@ -294,5 +299,123 @@ describe('RoughCountryStockSyncService', () => {
 
     expect(result.status).toBe('failed');
     expect(feedClient.fetchStockRows).not.toHaveBeenCalled();
+    // Phase 5: Should emit critical notification to admins
+    expect(notifications.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventKey: 'system.stock_sync_config_error',
+        recipientUserId: SYSTEM_USER_ID,
+        entityType: 'stock_sync_job',
+        entityId: ROUGH_COUNTRY_JOB_TYPE,
+      }),
+    );
+  });
+
+  describe('Phase 5: Critical Admin Notifications', () => {
+    it('emits notification when both branch IDs are missing', async () => {
+      configureSync({ branchNvId: undefined, branchTnId: undefined });
+
+      await service.run();
+
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventKey: 'system.stock_sync_config_error',
+          recipientUserId: SYSTEM_USER_ID,
+        }),
+      );
+    });
+
+    it('emits notification when sync fails due to feed error', async () => {
+      feedClient.fetchStockRows.mockRejectedValue(
+        new Error('Failed to download XLSX'),
+      );
+
+      await service.run();
+
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventKey: 'system.stock_sync_failed',
+          recipientUserId: SYSTEM_USER_ID,
+          context: {
+            reference: 'Failed to download XLSX',
+          },
+        }),
+      );
+    });
+
+    it('emits notification when feed is empty', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([]);
+
+      await service.run();
+
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventKey: 'system.stock_sync_failed',
+          context: {
+            reference: expect.stringContaining('feed contained no rows'),
+          },
+        }),
+      );
+    });
+
+    it('emits notification when no SKUs match products', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([
+        { sku: 'UNKNOWN', nvStock: 1, tnStock: 1 },
+      ]);
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(new Set());
+
+      await service.run();
+
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventKey: 'system.stock_sync_failed',
+          context: {
+            reference: expect.stringContaining('none of the'),
+          },
+        }),
+      );
+    });
+
+    it('does not emit notification when sync succeeds', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([
+        { sku: 'ABC', nvStock: 1, tnStock: 1 },
+      ]);
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(new Set(['ABC']));
+      inventoryRepo.bulkUpsertStock.mockResolvedValue({
+        written: 2,
+        clamped: [],
+      });
+
+      await service.run();
+
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('does not emit notification when sync is disabled', async () => {
+      configureSync({ enabled: false });
+
+      await service.run();
+
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('does not emit notification when sync is locked', async () => {
+      lock.tryAcquire.mockResolvedValue(false);
+
+      await service.run();
+
+      expect(notifications.create).not.toHaveBeenCalled();
+    });
+
+    it('continues with sync result if notification fails', async () => {
+      configureSync({ branchNvId: undefined });
+      notifications.create.mockRejectedValue(
+        new Error('Notification service down'),
+      );
+
+      const result = await service.run();
+
+      // Should still return failed status despite notification error
+      expect(result.status).toBe('failed');
+    });
   });
 });

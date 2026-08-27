@@ -42,6 +42,17 @@ const RESTORED_INDEXES = [
   'idx_pxref_reference_id',
 ];
 
+/** Indexes added by Phase 3 (PIM pagination optimization). */
+const PHASE3_PIM_INDEXES = [
+  'idx_brand_active_name',
+  'idx_category_active_code',
+  'idx_category_department_id',
+  'idx_department_active_code',
+];
+
+/** All indexes that should exist after running all migrations. */
+const ALL_EXPECTED_INDEXES = [...RESTORED_INDEXES, ...PHASE3_PIM_INDEXES];
+
 /** The code-based names the id migration dropped. None may come back. */
 const DEAD_INDEXES = [
   'idx_compat_model_code',
@@ -58,8 +69,11 @@ const DEAD_INDEXES = [
   'idx_pxref_reference_sku',
 ];
 
-/** The migration under test, by identity — `undoLastMigration` is positional. */
+/** The repair migration that restored id-based indexes. */
 const REPAIR_MIGRATION = 'RestoreIdBasedIndexes1787788800000';
+
+/** The latest migration after security audit (Phase 4). */
+const LATEST_MIGRATION = 'AddVehicleCompatibilityIndexes1787961600000';
 
 describeWithDocker('migration chain', () => {
   jest.setTimeout(240_000);
@@ -125,7 +139,7 @@ describeWithDocker('migration chain', () => {
   it('leaves every destroyed index restored and no dead one recreated', async () => {
     const present = await indexNames();
 
-    for (const name of RESTORED_INDEXES) expect(present).toContain(name);
+    for (const name of ALL_EXPECTED_INDEXES) expect(present).toContain(name);
     for (const name of DEAD_INDEXES) expect(present).not.toContain(name);
   });
 
@@ -159,15 +173,18 @@ describeWithDocker('migration chain', () => {
     const deficit = await indexDefs();
     expect(fresh.length - deficit.length).toBe(RESTORED_INDEXES.length);
 
-    // undoLastMigration is positional. Pin the identity so a future migration
-    // with a higher timestamp fails loudly instead of silently retargeting.
-    await expect(lastAppliedMigration()).resolves.toBe(REPAIR_MIGRATION);
-    await dataSource.undoLastMigration();
+    // undoLastMigration is positional. After security audit, we need to undo
+    // back to BEFORE the repair migration, then rerun all.
+    await expect(lastAppliedMigration()).resolves.toBe(LATEST_MIGRATION);
+    // Undo Phase 4, Phase 3, then repair migration
+    await dataSource.undoLastMigration(); // Phase 4
+    await dataSource.undoLastMigration(); // Phase 3
+    await dataSource.undoLastMigration(); // Repair
     await dataSource.runMigrations();
 
     // DEFINITIONS. This is the assertion that makes the two levers provably
-    // equivalent: everything below now exists because the REPAIR migration
-    // created it, and every statement must match what InitialSchema produced.
+    // equivalent: everything below now exists because the migrations
+    // created it, and every statement must match what fresh run produced.
     expect(await indexDefs()).toEqual(fresh);
   });
 
@@ -188,21 +205,25 @@ describeWithDocker('migration chain', () => {
 
   // Proves the IF NOT EXISTS guards hold where the indexes already exist.
   //
-  // Reverting first would DROP all twelve and recreate them from absent — the
+  // Reverting first would DROP all indexes and recreate them from absent — the
   // path convergence already covers, and one that passes with both migration
-  // bodies empty. Clearing the ledger row instead leaves the indexes in place,
+  // bodies empty. Clearing the ledger rows instead leaves the indexes in place,
   // so `up()` runs against a database that already has them: without the
   // guards this throws `relation already exists`.
   it('is idempotent when every index is already present', async () => {
     const before = await indexDefs();
 
-    await dataSource.query(`DELETE FROM migrations WHERE name = $1`, [
+    // Delete all three migrations: repair, Phase 3, Phase 4
+    await dataSource.query(`DELETE FROM migrations WHERE name IN ($1, $2, $3)`, [
       REPAIR_MIGRATION,
+      'AddPimPaginationIndexes1787875200000',
+      LATEST_MIGRATION,
     ]);
     const rerun = await dataSource.runMigrations();
-    // Naming it, not `toBeDefined`: an empty array is defined too, and would
-    // mean the guarded path was never entered and this test proved nothing.
+    // Verify all three ran
     expect(rerun.map((m) => m.name)).toContain(REPAIR_MIGRATION);
+    expect(rerun.map((m) => m.name)).toContain('AddPimPaginationIndexes1787875200000');
+    expect(rerun.map((m) => m.name)).toContain(LATEST_MIGRATION);
 
     expect(await indexDefs()).toEqual(before);
   });

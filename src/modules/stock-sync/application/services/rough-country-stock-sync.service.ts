@@ -9,6 +9,7 @@ import { ImportJobService } from '../../../integrations/application/services/imp
 import { AppConfig } from '../../../../shared/config/configuration';
 import { STOCK_FEED_CLIENT, StockFeedClient } from '../ports/stock-feed.client';
 import { SYNC_LOCK, SyncLock } from '../../../../shared/database/sync-lock';
+import { NotificationService } from '../../../notifications/application/services/notification.service';
 
 export const ROUGH_COUNTRY_JOB_TYPE = 'rough-country-stock';
 export const ROUGH_COUNTRY_SOURCE_SYSTEM = 'roughcountry-jobber-pc3';
@@ -55,6 +56,7 @@ export class RoughCountryStockSyncService {
     private readonly inventory: InventoryRepository,
     @Inject(SYNC_LOCK) private readonly lock: SyncLock,
     private readonly importJobs: ImportJobService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async run(): Promise<StockSyncRunResult> {
@@ -69,9 +71,13 @@ export class RoughCountryStockSyncService {
     if (branchNvId === undefined || branchTnId === undefined) {
       // Joi already requires these when the sync is enabled; this is the
       // belt-and-braces guard for a hand-edited environment.
-      this.logger.error(
-        'Rough Country stock sync is enabled but ROUGH_COUNTRY_BRANCH_NV_ID / _TN_ID are not set',
-      );
+      const errorMsg =
+        'Rough Country stock sync is enabled but ROUGH_COUNTRY_BRANCH_NV_ID / _TN_ID are not set';
+      this.logger.error(errorMsg);
+
+      // Emit critical notification to system administrators
+      await this.emitCriticalAlert('system.stock_sync_config_error', errorMsg);
+
       return {
         status: 'failed',
         recordsReceived: 0,
@@ -184,6 +190,9 @@ export class RoughCountryStockSyncService {
       const reason = e instanceof Error ? e.message : String(e);
       this.logger.error(`Rough Country stock sync failed: ${reason}`);
 
+      // Emit critical notification to system administrators
+      await this.emitCriticalAlert('system.stock_sync_failed', reason);
+
       await this.importJobs.addLog(job.id, { level: 'error', message: reason });
       await this.importJobs.update(job.id, {
         status: 'failed',
@@ -239,5 +248,33 @@ export class RoughCountryStockSyncService {
         truncated: clamped.length > MAX_LOGGED_ITEMS,
       },
     });
+  }
+
+  /**
+   * Emits a critical system alert to administrators.
+   * Uses a special system user ID so admins can subscribe to these notifications.
+   */
+  private async emitCriticalAlert(
+    eventKey: 'system.stock_sync_config_error' | 'system.stock_sync_failed',
+    message: string,
+  ): Promise<void> {
+    try {
+      // System notifications use a reserved UUID for admin routing
+      const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001';
+      await this.notifications.create({
+        eventKey,
+        recipientUserId: SYSTEM_USER_ID,
+        entityType: 'stock_sync_job',
+        entityId: ROUGH_COUNTRY_JOB_TYPE,
+        context: {
+          reference: message, // Error message goes in the reference field
+        },
+      });
+    } catch (notifError) {
+      // Don't let notification failures block the sync result
+      this.logger.warn(
+        `Failed to emit critical alert notification: ${notifError}`,
+      );
+    }
   }
 }

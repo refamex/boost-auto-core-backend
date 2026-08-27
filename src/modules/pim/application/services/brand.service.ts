@@ -1,8 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  paginated,
+  PaginatedResult,
+} from '../../../../shared/common/pagination/pagination.dto';
 import { BrandEntity } from '../../domain/entities/brand.entity';
 import {
+  BrandQueryDto,
   CreateBrandDto,
   UpdateBrandDto,
 } from '../../infrastructure/http/dto/taxonomies.dto';
@@ -14,8 +19,20 @@ export class BrandService {
     private readonly repo: Repository<BrandEntity>,
   ) {}
 
-  list(): Promise<BrandEntity[]> {
-    return this.repo.find({ order: { name: 'ASC' } });
+  async list(query: BrandQueryDto): Promise<PaginatedResult<BrandEntity>> {
+    const where: Record<string, unknown> = {};
+    if (query.isActive !== undefined) {
+      where.isActive = query.isActive;
+    }
+
+    const [items, total] = await this.repo.findAndCount({
+      where,
+      order: { name: 'ASC' },
+      skip: query.skip,
+      take: query.limit,
+    });
+
+    return paginated(items, total, query);
   }
 
   async findById(id: number): Promise<BrandEntity> {

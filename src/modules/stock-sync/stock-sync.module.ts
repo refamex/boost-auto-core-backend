@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { IntegrationsModule } from '../integrations/integrations.module';
 import { InventoryModule } from '../inventory/inventory.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { STOCK_FEED_CLIENT } from './application/ports/stock-feed.client';
 import { SYNC_LOCK } from '../../shared/database/sync-lock';
 import { RoughCountryStockSyncService } from './application/services/rough-country-stock-sync.service';
@@ -17,7 +18,7 @@ import { StockSyncScheduler } from './infrastructure/scheduler/stock-sync.schedu
  * integrations.import_jobs with its own logs.
  */
 @Module({
-  imports: [InventoryModule, IntegrationsModule],
+  imports: [InventoryModule, IntegrationsModule, NotificationsModule],
   providers: [
     RoughCountryStockSyncService,
     StockSyncScheduler,

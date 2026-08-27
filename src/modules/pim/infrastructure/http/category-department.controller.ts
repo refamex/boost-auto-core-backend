@@ -8,12 +8,14 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { CategoryDepartmentService } from '../../application/services/category-department.service';
 import {
   CreateCategoryDepartmentDto,
+  DepartmentQueryDto,
   UpdateCategoryDepartmentDto,
 } from './dto/category-department.dto';
 
@@ -24,8 +26,8 @@ export class CategoryDepartmentController {
   constructor(private readonly svc: CategoryDepartmentService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  list(@Query() query: DepartmentQueryDto) {
+    return this.svc.list(query);
   }
 
   @Get(':id')

@@ -19,9 +19,18 @@ describe('notification catalogue', () => {
   });
 
   it('renders every title with the document number inline', () => {
+    // System events don't include order references in title
+    const systemEvents = [
+      'system.stock_sync_config_error',
+      'system.stock_sync_failed',
+    ];
+    
     for (const key of NOTIFICATION_EVENT_KEYS) {
       const { title } = renderNotification(key, { reference: 'ORD-123' });
-      expect(title).toContain('ORD-123');
+      
+      if (!systemEvents.includes(key)) {
+        expect(title).toContain('ORD-123');
+      }
     }
   });
 

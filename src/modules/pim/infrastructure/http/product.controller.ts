@@ -21,6 +21,7 @@ import {
   ProductQueryDto,
   UpdateProductDto,
   UpsertProductDimensionDto,
+  VehicleProductQueryDto,
 } from './dto/product.dto';
 import {
   ProductColorService,
@@ -44,6 +45,11 @@ export class ProductController {
   @Get()
   search(@Query() query: ProductQueryDto) {
     return this.products.search(query);
+  }
+
+  @Get('by-vehicle')
+  findByVehicle(@Query() query: VehicleProductQueryDto) {
+    return this.products.findProductsByVehicle(query);
   }
 
   @Get(':id')

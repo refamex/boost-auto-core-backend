@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
 import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { PaginationDto } from '../../../../../shared/common/pagination/pagination.dto';
 
 export class CreateCategoryDepartmentDto {
   @ApiProperty()
@@ -21,3 +23,16 @@ export class CreateCategoryDepartmentDto {
 export class UpdateCategoryDepartmentDto extends PartialType(
   CreateCategoryDepartmentDto,
 ) {}
+
+export class DepartmentQueryDto extends PaginationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (typeof value === 'boolean') return value;
+    return undefined;
+  })
+  @IsBoolean()
+  isActive?: boolean;
+}

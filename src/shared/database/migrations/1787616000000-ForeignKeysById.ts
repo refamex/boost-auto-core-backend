@@ -215,7 +215,7 @@ const REFS: Ref[] = [
     targetTable: 'motorization_car',
     lookupColumn: 'code',
     type: 'BIGINT',
-    nullable: false,
+    nullable: true,
     onDelete: 'RESTRICT',
   },
   {

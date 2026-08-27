@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsBoolean,
   IsInt,
@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator';
+import { PaginationDto } from '../../../../../shared/common/pagination/pagination.dto';
 
 // -------- Category --------
 export class CreateCategoryDto {
@@ -44,7 +45,7 @@ export class CreateCategoryDto {
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}
 
-export class CategoryQueryDto {
+export class CategoryQueryDto extends PaginationDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
@@ -57,7 +58,12 @@ export class CategoryQueryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (typeof value === 'boolean') return value;
+    return undefined;
+  })
   @IsBoolean()
   isActive?: boolean;
 }
@@ -86,6 +92,19 @@ export class CreateBrandDto {
 }
 
 export class UpdateBrandDto extends PartialType(CreateBrandDto) {}
+
+export class BrandQueryDto extends PaginationDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (typeof value === 'boolean') return value;
+    return undefined;
+  })
+  @IsBoolean()
+  isActive?: boolean;
+}
 
 // -------- AutoPart --------
 export class CreateAutoPartDto {

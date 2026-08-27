@@ -1,6 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import {
+  paginated,
+  PaginatedResult,
+} from '../../../../shared/common/pagination/pagination.dto';
 import { CategoryEntity } from '../../domain/entities/category.entity';
 import {
   CategoryQueryDto,
@@ -15,7 +19,9 @@ export class CategoryService {
     private readonly repo: Repository<CategoryEntity>,
   ) {}
 
-  list(query: CategoryQueryDto): Promise<CategoryEntity[]> {
+  async list(
+    query: CategoryQueryDto,
+  ): Promise<PaginatedResult<CategoryEntity>> {
     const qb = this.repo
       .createQueryBuilder('c')
       .leftJoinAndSelect('c.department', 'd')
@@ -36,7 +42,11 @@ export class CategoryService {
     if (query.isActive !== undefined) {
       qb.andWhere('c.is_active = :isActive', { isActive: query.isActive });
     }
-    return qb.getMany();
+
+    qb.skip(query.skip).take(query.limit);
+
+    const [items, total] = await qb.getManyAndCount();
+    return paginated(items, total, query);
   }
 
   async findById(id: number): Promise<CategoryEntity> {
@@ -57,8 +67,12 @@ export class CategoryService {
     return this.repo.save(this.repo.merge(existing, dto));
   }
 
+  /**
+   * Soft delete: marks category as inactive instead of physical deletion.
+   * Phase 6: prevents data loss and maintains referential integrity.
+   */
   async remove(id: number): Promise<void> {
     const existing = await this.findById(id);
-    await this.repo.remove(existing);
+    await this.repo.save({ ...existing, isActive: false });
   }
 }

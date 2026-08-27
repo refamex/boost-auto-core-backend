@@ -17,6 +17,7 @@ export const NOTIFICATION_CATEGORIES = [
   'invoice',
   'credit',
   'promo',
+  'system',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
@@ -33,6 +34,8 @@ export const NOTIFICATION_EVENT_KEYS = [
   'shipment.delivered',
   'shipment.exception',
   'invoice.available',
+  'system.stock_sync_config_error',
+  'system.stock_sync_failed',
 ] as const;
 export type NotificationEventKey = (typeof NOTIFICATION_EVENT_KEYS)[number];
 
@@ -116,6 +119,16 @@ export const NOTIFICATION_TEMPLATES: Record<
   'invoice.available': {
     category: 'invoice',
     title: (c) => `Tu factura ${c.reference} ya está disponible`,
+  },
+  'system.stock_sync_config_error': {
+    category: 'system',
+    title: () => 'Error de configuración en sincronización de stock',
+    body: (c) => c.reference, // reference carries the error message
+  },
+  'system.stock_sync_failed': {
+    category: 'system',
+    title: () => 'Falló la sincronización de stock de Rough Country',
+    body: (c) => c.reference, // reference carries the error message
   },
 };
 
