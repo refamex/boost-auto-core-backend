@@ -1,13 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, SelectQueryBuilder } from 'typeorm';
+import { SelectQueryBuilder } from 'typeorm';
 import { ProductEntity } from '../../domain/entities/product.entity';
 import { ProductService } from './product.service';
 import { VehicleProductQueryDto } from '../../infrastructure/http/dto/product.dto';
 
 describe('ProductService — Vehicle Search (Phase 4)', () => {
   let service: ProductService;
-  let repo: Repository<ProductEntity>;
   let mockQueryBuilder: Partial<SelectQueryBuilder<ProductEntity>>;
 
   beforeEach(async () => {
@@ -39,9 +38,6 @@ describe('ProductService — Vehicle Search (Phase 4)', () => {
     }).compile();
 
     service = module.get<ProductService>(ProductService);
-    repo = module.get<Repository<ProductEntity>>(
-      getRepositoryToken(ProductEntity),
-    );
   });
 
   it('should filter by modelId when provided', async () => {
