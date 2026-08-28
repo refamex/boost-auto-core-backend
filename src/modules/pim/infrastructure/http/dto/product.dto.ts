@@ -136,13 +136,17 @@ export class VehicleProductQueryDto extends PaginationDto {
   @IsInt()
   yearId?: number;
 
-  @ApiPropertyOptional({ description: 'Assembly Plant ID (vehicles.assembly_plant.id)' })
+  @ApiPropertyOptional({
+    description: 'Assembly Plant ID (vehicles.assembly_plant.id)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   assemblyPlantId?: number;
 
-  @ApiPropertyOptional({ description: 'Motorization ID (vehicles.motorization_car.id)' })
+  @ApiPropertyOptional({
+    description: 'Motorization ID (vehicles.motorization_car.id)',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

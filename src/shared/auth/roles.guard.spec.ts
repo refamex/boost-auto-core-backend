@@ -105,7 +105,6 @@ describe('OrderController route gates — Defect A regression (F11)', () => {
   // if a future edit changes the real `@Roles(...)` metadata — never called
   // with a `this` context, only handed to `Reflect.getMetadata` via
   // `ctx.getHandler()`, exactly like NestJS's real `RolesGuard` does.
-  /* eslint-disable @typescript-eslint/unbound-method */
   it('POST /v1/orders is reachable by a customer-role token', () => {
     const guard = new RolesGuard(realReflector);
 
@@ -152,7 +151,6 @@ describe('ShippingController route gates — F9', () => {
       switchToHttp: () => ({ getRequest: () => ({ user }) }),
     }) as unknown as ExecutionContext;
 
-  /* eslint-disable @typescript-eslint/unbound-method */
   it('quoting an order is reachable with shipping:read alone', () => {
     const guard = new RolesGuard(realReflector);
     expect(
@@ -202,5 +200,4 @@ describe('ShippingController route gates — F9', () => {
       ),
     ).toThrow();
   });
-  /* eslint-enable @typescript-eslint/unbound-method */
 });

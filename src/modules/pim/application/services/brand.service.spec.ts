@@ -56,7 +56,12 @@ describe('BrandService — pagination (Phase 2)', () => {
 
   it('applies pagination with custom page and limit', async () => {
     const mockBrands: BrandEntity[] = [
-      { id: 11, name: 'Brand K', brandCode: 'K', isActive: true } as BrandEntity,
+      {
+        id: 11,
+        name: 'Brand K',
+        brandCode: 'K',
+        isActive: true,
+      } as BrandEntity,
     ];
     repo.findAndCount.mockResolvedValue([mockBrands, 100]);
 

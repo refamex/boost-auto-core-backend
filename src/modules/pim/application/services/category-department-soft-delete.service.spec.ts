@@ -16,7 +16,7 @@ describe('CategoryDepartmentService — Phase 6: Soft Delete', () => {
     categories: [],
     isActive: true,
     createdAt: new Date(),
-  } as CategoryDepartmentEntity;
+  };
 
   beforeEach(async () => {
     const mockRepository = {

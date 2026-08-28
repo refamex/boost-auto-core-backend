@@ -14,6 +14,36 @@ import { DataSource } from 'typeorm';
 import { describeWithDocker } from './docker-gate';
 
 /**
+ * supertest declares `res.body` as `any`, and TypeORM declares `query()` as
+ * `Promise<any>`. Both are narrowed once here rather than at ~40 call sites,
+ * which is what let this file drift into 41 lint errors.
+ */
+interface PaginatedBody<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  pages: number;
+}
+
+const paged = (res: request.Response): PaginatedBody<{ id: number }> =>
+  res.body as PaginatedBody<{ id: number }>;
+
+/** Narrows a raw `dataSource.query()` result to the row shape it selected. */
+const rows = <T>(result: unknown): T[] => result as T[];
+
+/** The one row / one array-valued column `EXPLAIN (ANALYZE, FORMAT JSON)` returns. */
+interface QueryPlan {
+  'Execution Time': number;
+}
+
+/** Passes a raw `any` query result through as `unknown`, forcing a narrow. */
+const raw = (result: unknown): unknown => result;
+
+const explain = (result: unknown): QueryPlan =>
+  (result as { 'QUERY PLAN': QueryPlan[] }[])[0]['QUERY PLAN'][0];
+
+/**
  * Phase 8: Performance Testing
  *
  * Verifies that optimizations from Phases 2-4 meet performance requirements:
@@ -175,21 +205,23 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
       const duration = Date.now() - start;
 
       expect(duration).toBeLessThan(200);
-      expect(res.body.items.length).toBeGreaterThan(0);
+      expect(paged(res).items.length).toBeGreaterThan(0);
     });
   });
 
   describe('Phase 3: Index Performance Verification', () => {
     it('verifies EXPLAIN ANALYZE shows index usage for brand query', async () => {
-      const result = await dataSource.query(`
-        EXPLAIN (ANALYZE, FORMAT JSON)
-        SELECT * FROM pim.brand
-        WHERE is_active = true
-        ORDER BY name
-        LIMIT 25
-      `);
+      const result = raw(
+        await dataSource.query(`
+          EXPLAIN (ANALYZE, FORMAT JSON)
+          SELECT * FROM pim.brand
+          WHERE is_active = true
+          ORDER BY name
+          LIMIT 25
+        `),
+      );
 
-      const plan = result[0]['QUERY PLAN'][0];
+      const plan = explain(result);
       const planText = JSON.stringify(plan);
 
       // Should use idx_brand_active_name index
@@ -198,15 +230,17 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
     });
 
     it('verifies index usage for department query', async () => {
-      const result = await dataSource.query(`
-        EXPLAIN (ANALYZE, FORMAT JSON)
-        SELECT * FROM pim.category_department
-        WHERE is_active = true
-        ORDER BY code
-        LIMIT 25
-      `);
+      const result = raw(
+        await dataSource.query(`
+          EXPLAIN (ANALYZE, FORMAT JSON)
+          SELECT * FROM pim.category_department
+          WHERE is_active = true
+          ORDER BY code
+          LIMIT 25
+        `),
+      );
 
-      const plan = result[0]['QUERY PLAN'][0];
+      const plan = explain(result);
       const planText = JSON.stringify(plan);
 
       expect(planText).toContain('idx_department_active_code');
@@ -238,64 +272,85 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
 
     beforeAll(async () => {
       // Create vehicle dimension records
-      const assemblyResult = await dataSource.query(`
-        INSERT INTO vehicles.assembly_plant (code, assembly_plant)
-        VALUES ('US-ASSEMBLY', 'US Assembly Plant')
-        RETURNING id
-      `);
+      const assemblyResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO vehicles.assembly_plant (code, assembly_plant)
+          VALUES ('US-ASSEMBLY', 'US Assembly Plant')
+          RETURNING id
+        `),
+      );
       assemblyPlantId = assemblyResult[0].id;
 
-      const modelResult = await dataSource.query(`
-        INSERT INTO vehicles.model_car (code_model, model_car)
-        VALUES ('F150', 'Ford F-150')
-        RETURNING id
-      `);
+      const modelResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO vehicles.model_car (code_model, model_car)
+          VALUES ('F150', 'Ford F-150')
+          RETURNING id
+        `),
+      );
       modelId = modelResult[0].id;
 
-      const yearResult = await dataSource.query(`
-        INSERT INTO vehicles.year_car (code, year)
-        VALUES ('2020', '2020')
-        RETURNING id
-      `);
+      const yearResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO vehicles.year_car (code, year)
+          VALUES ('2020', '2020')
+          RETURNING id
+        `),
+      );
       yearId = yearResult[0].id;
 
-      const motorizationResult = await dataSource.query(`
-        INSERT INTO vehicles.motorization_car (code, motorization)
-        VALUES ('V8', 'V8 5.0L')
-        RETURNING id
-      `);
+      const motorizationResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO vehicles.motorization_car (code, motorization)
+          VALUES ('V8', 'V8 5.0L')
+          RETURNING id
+        `),
+      );
       motorizationId = motorizationResult[0].id;
 
       // Create category and product
-      const deptResult = await dataSource.query(`
-        INSERT INTO pim.category_department (code, department_name, is_active)
-        VALUES ('AUTO-PARTS', 'Auto Parts', true)
-        RETURNING id
-      `);
+      const deptResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO pim.category_department (code, department_name, is_active)
+          VALUES ('AUTO-PARTS', 'Auto Parts', true)
+          RETURNING id
+        `),
+      );
       const deptId = deptResult[0].id;
 
-      const catResult = await dataSource.query(`
-        INSERT INTO pim.category (code, name, id_department, is_active)
-        VALUES ('SUSPENSION', 'Suspension', $1, true)
-        RETURNING id
-      `,
-        [deptId],
+      const catResult = rows<{ id: number }>(
+        await dataSource.query(
+          `
+          INSERT INTO pim.category (code, name, id_department, is_active)
+          VALUES ('SUSPENSION', 'Suspension', $1, true)
+          RETURNING id
+        `,
+          [deptId],
+        ),
       );
       const categoryId = catResult[0].id;
 
       // Create 50 products with compatibility
       for (let i = 0; i < 50; i++) {
-        const productResult = await dataSource.query(`
-          INSERT INTO pim.product (sku, name, category_id, is_visible)
-          VALUES ($1, $2, $3, true)
-          RETURNING id
-        `,
-          [`PERF-SKU-${String(i + 1).padStart(4, '0')}`, `Vehicle Product ${i + 1}`, categoryId],
+        const productResult = rows<{ id: number }>(
+          await dataSource.query(
+            `
+            INSERT INTO pim.product (sku, name, category_id, is_visible)
+            VALUES ($1, $2, $3, true)
+            RETURNING id
+          `,
+            [
+              `PERF-SKU-${String(i + 1).padStart(4, '0')}`,
+              `Vehicle Product ${i + 1}`,
+              categoryId,
+            ],
+          ),
         );
         productId = productResult[0].id;
 
         // Link product to vehicle via compatibility
-        await dataSource.query(`
+        await dataSource.query(
+          `
           INSERT INTO compatibility.compatibilities (product_id, model_id, year_id, assembly_plant_id, motorization_id)
           VALUES ($1, $2, $3, $4, $5)
         `,
@@ -305,21 +360,24 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
     });
 
     it('verifies optimized query plan for vehicle search', async () => {
-      const result = await dataSource.query(`
-        EXPLAIN (ANALYZE, FORMAT JSON)
-        SELECT DISTINCT p.*
-        FROM pim.product p
-        INNER JOIN compatibility.compatibilities c ON c.product_id = p.id
-        WHERE c.model_id = $1
-          AND c.year_id = $2
-          AND p.is_visible = true
-        ORDER BY p.id DESC
-        LIMIT 25
-      `,
-        [modelId, yearId],
+      const result = raw(
+        await dataSource.query(
+          `
+          EXPLAIN (ANALYZE, FORMAT JSON)
+          SELECT DISTINCT p.*
+          FROM pim.product p
+          INNER JOIN compatibility.compatibilities c ON c.product_id = p.id
+          WHERE c.model_id = $1
+            AND c.year_id = $2
+            AND p.is_visible = true
+          ORDER BY p.id DESC
+          LIMIT 25
+        `,
+          [modelId, yearId],
+        ),
       );
 
-      const plan = result[0]['QUERY PLAN'][0];
+      const plan = explain(result);
 
       // Query should execute in <5ms as per Phase 4 spec
       expect(plan['Execution Time']).toBeLessThan(5);
@@ -328,17 +386,20 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
     it('vehicle search query completes efficiently', async () => {
       const start = Date.now();
 
-      const products = await dataSource.query(`
-        SELECT DISTINCT p.*
-        FROM pim.product p
-        INNER JOIN compatibility.compatibilities c ON c.product_id = p.id
-        WHERE c.model_id = $1
-          AND c.year_id = $2
-          AND p.is_visible = true
-        ORDER BY p.id DESC
-        LIMIT 25
-      `,
-        [modelId, yearId],
+      const products = rows<Record<string, unknown>>(
+        await dataSource.query(
+          `
+          SELECT DISTINCT p.*
+          FROM pim.product p
+          INNER JOIN compatibility.compatibilities c ON c.product_id = p.id
+          WHERE c.model_id = $1
+            AND c.year_id = $2
+            AND p.is_visible = true
+          ORDER BY p.id DESC
+          LIMIT 25
+        `,
+          [modelId, yearId],
+        ),
       );
 
       const duration = Date.now() - start;
@@ -351,20 +412,27 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
   describe('Phase 8: Bulk Operations Performance', () => {
     it('handles bulk category listing (1000+ records) efficiently', async () => {
       // Create department for bulk test
-      const deptResult = await dataSource.query(`
-        INSERT INTO pim.category_department (code, department_name, is_active)
-        VALUES ('BULK-TEST', 'Bulk Test Department', true)
-        RETURNING id
-      `);
+      const deptResult = rows<{ id: number }>(
+        await dataSource.query(`
+          INSERT INTO pim.category_department (code, department_name, is_active)
+          VALUES ('BULK-TEST', 'Bulk Test Department', true)
+          RETURNING id
+        `),
+      );
       const deptId = deptResult[0].id;
 
       // Insert 200 categories (reasonable bulk size)
       for (let i = 0; i < 200; i++) {
-        await dataSource.query(`
+        await dataSource.query(
+          `
           INSERT INTO pim.category (code, name, id_department, is_active)
           VALUES ($1, $2, $3, true)
         `,
-          [`BULK-CAT-${String(i + 1).padStart(4, '0')}`, `Category ${i + 1}`, deptId],
+          [
+            `BULK-CAT-${String(i + 1).padStart(4, '0')}`,
+            `Category ${i + 1}`,
+            deptId,
+          ],
         );
       }
 
@@ -379,8 +447,8 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
 
       // Should handle 100 records per page efficiently
       expect(duration).toBeLessThan(200);
-      expect(res.body.items.length).toBe(100);
-      expect(res.body.total).toBeGreaterThanOrEqual(200);
+      expect(paged(res).items.length).toBe(100);
+      expect(paged(res).total).toBeGreaterThanOrEqual(200);
     });
 
     it('pagination offset performance remains acceptable for deep pages', async () => {
@@ -424,11 +492,21 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
       const start = Date.now();
 
       const requests = [
-        request(app.getHttpServer()).get('/api/v1/brands?isActive=true').set(adminHeaders()),
-        request(app.getHttpServer()).get('/api/v1/departments?page=1&limit=50').set(adminHeaders()),
-        request(app.getHttpServer()).get('/api/v1/categories?page=1&limit=25').set(adminHeaders()),
-        request(app.getHttpServer()).get('/api/v1/brands?page=2&limit=25').set(adminHeaders()),
-        request(app.getHttpServer()).get('/api/v1/departments?isActive=false').set(adminHeaders()),
+        request(app.getHttpServer())
+          .get('/api/v1/brands?isActive=true')
+          .set(adminHeaders()),
+        request(app.getHttpServer())
+          .get('/api/v1/departments?page=1&limit=50')
+          .set(adminHeaders()),
+        request(app.getHttpServer())
+          .get('/api/v1/categories?page=1&limit=25')
+          .set(adminHeaders()),
+        request(app.getHttpServer())
+          .get('/api/v1/brands?page=2&limit=25')
+          .set(adminHeaders()),
+        request(app.getHttpServer())
+          .get('/api/v1/departments?isActive=false')
+          .set(adminHeaders()),
       ];
 
       const responses = await Promise.all(requests);

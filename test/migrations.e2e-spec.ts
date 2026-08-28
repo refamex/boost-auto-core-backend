@@ -214,15 +214,20 @@ describeWithDocker('migration chain', () => {
     const before = await indexDefs();
 
     // Delete all three migrations: repair, Phase 3, Phase 4
-    await dataSource.query(`DELETE FROM migrations WHERE name IN ($1, $2, $3)`, [
-      REPAIR_MIGRATION,
-      'AddPimPaginationIndexes1787875200000',
-      LATEST_MIGRATION,
-    ]);
+    await dataSource.query(
+      `DELETE FROM migrations WHERE name IN ($1, $2, $3)`,
+      [
+        REPAIR_MIGRATION,
+        'AddPimPaginationIndexes1787875200000',
+        LATEST_MIGRATION,
+      ],
+    );
     const rerun = await dataSource.runMigrations();
     // Verify all three ran
     expect(rerun.map((m) => m.name)).toContain(REPAIR_MIGRATION);
-    expect(rerun.map((m) => m.name)).toContain('AddPimPaginationIndexes1787875200000');
+    expect(rerun.map((m) => m.name)).toContain(
+      'AddPimPaginationIndexes1787875200000',
+    );
     expect(rerun.map((m) => m.name)).toContain(LATEST_MIGRATION);
 
     expect(await indexDefs()).toEqual(before);

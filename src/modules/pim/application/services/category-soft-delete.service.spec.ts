@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { Repository } from 'typeorm';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { CategoryService } from './category.service';
+import { CategoryDepartmentEntity } from '../../domain/entities/category-department.entity';
 import { CategoryEntity } from '../../domain/entities/category.entity';
 import { NotFoundException } from '@nestjs/common';
 
@@ -15,7 +16,7 @@ describe('CategoryService — Phase 6: Soft Delete', () => {
     name: 'Test Category',
     description: 'Test Description',
     idDepartment: 1,
-    department: {} as any,
+    department: {} as CategoryDepartmentEntity,
     isActive: true,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -99,7 +100,9 @@ describe('CategoryService — Phase 6: Soft Delete', () => {
 
       // Act & Assert
       await expect(service.remove(999)).rejects.toThrow(NotFoundException);
-      await expect(service.remove(999)).rejects.toThrow('Category 999 not found');
+      await expect(service.remove(999)).rejects.toThrow(
+        'Category 999 not found',
+      );
       expect(repository.save).not.toHaveBeenCalled();
       expect(repository.remove).not.toHaveBeenCalled();
     });

@@ -351,7 +351,10 @@ describe('RoughCountryStockSyncService', () => {
         expect.objectContaining({
           eventKey: 'system.stock_sync_failed',
           context: {
-            reference: expect.stringContaining('feed contained no rows'),
+            // `expect.stringContaining` is declared `any` by @types/jest.
+            reference: expect.stringContaining(
+              'feed contained no rows',
+            ) as string,
           },
         }),
       );
@@ -369,7 +372,7 @@ describe('RoughCountryStockSyncService', () => {
         expect.objectContaining({
           eventKey: 'system.stock_sync_failed',
           context: {
-            reference: expect.stringContaining('none of the'),
+            reference: expect.stringContaining('none of the') as string,
           },
         }),
       );
