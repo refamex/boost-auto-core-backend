@@ -12,6 +12,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { describeWithDocker } from './docker-gate';
+import { Paginated, TaxonomyRow, bodyOf, rowsOf } from './typed-results';
 
 /**
  * supertest declares `res.body` as `any`, and TypeORM declares `query()` as

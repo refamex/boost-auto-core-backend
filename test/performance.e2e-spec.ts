@@ -12,6 +12,14 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { describeWithDocker } from './docker-gate';
+import {
+  ExplainRow,
+  IdRow,
+  Paginated,
+  TaxonomyRow,
+  bodyOf,
+  rowsOf,
+} from './typed-results';
 
 /**
  * supertest declares `res.body` as `any`, and TypeORM declares `query()` as
@@ -450,6 +458,7 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
       const duration = Date.now() - start;
 
       // Should handle 100 records per page efficiently
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
       expect(duration).toBeLessThan(200);
       expect(paged(res).items.length).toBe(100);
       expect(paged(res).total).toBeGreaterThanOrEqual(200);

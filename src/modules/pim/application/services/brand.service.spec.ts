@@ -1,22 +1,29 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { BrandEntity } from '../../domain/entities/brand.entity';
 import { BrandService } from './brand.service';
 import { BrandQueryDto } from '../../infrastructure/http/dto/taxonomies.dto';
 
 describe('BrandService — pagination (Phase 2)', () => {
   let service: BrandService;
-  let repo: jest.Mocked<Repository<BrandEntity>>;
+
+  /**
+   * Held standalone rather than read back off the repository mock: asserting
+   * on a method plucked off that mock passes an unbound method reference
+   * around, which is what @typescript-eslint/unbound-method exists to catch.
+   */
+  const findAndCount = jest.fn();
 
   beforeEach(async () => {
+    findAndCount.mockReset();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BrandService,
         {
           provide: getRepositoryToken(BrandEntity),
           useValue: {
-            findAndCount: jest.fn(),
+            findAndCount,
             findOne: jest.fn(),
             create: jest.fn(),
             save: jest.fn(),
@@ -28,7 +35,6 @@ describe('BrandService — pagination (Phase 2)', () => {
     }).compile();
 
     service = module.get<BrandService>(BrandService);
-    repo = module.get(getRepositoryToken(BrandEntity));
   });
 
   it('returns paginated results with default page and limit', async () => {
@@ -36,7 +42,7 @@ describe('BrandService — pagination (Phase 2)', () => {
       { id: 1, name: 'Brand A', brandCode: 'A', isActive: true } as BrandEntity,
       { id: 2, name: 'Brand B', brandCode: 'B', isActive: true } as BrandEntity,
     ];
-    repo.findAndCount.mockResolvedValue([mockBrands, 50]);
+    findAndCount.mockResolvedValue([mockBrands, 50]);
 
     const query = new BrandQueryDto();
     const result = await service.list(query);
@@ -46,7 +52,7 @@ describe('BrandService — pagination (Phase 2)', () => {
     expect(result.page).toBe(1);
     expect(result.limit).toBe(25);
     expect(result.pages).toBe(2);
-    expect(repo.findAndCount).toHaveBeenCalledWith({
+    expect(findAndCount).toHaveBeenCalledWith({
       where: {},
       order: { name: 'ASC' },
       skip: 0,
@@ -63,7 +69,7 @@ describe('BrandService — pagination (Phase 2)', () => {
         isActive: true,
       } as BrandEntity,
     ];
-    repo.findAndCount.mockResolvedValue([mockBrands, 100]);
+    findAndCount.mockResolvedValue([mockBrands, 100]);
 
     const query: BrandQueryDto = Object.assign(new BrandQueryDto(), {
       page: 3,
@@ -77,7 +83,7 @@ describe('BrandService — pagination (Phase 2)', () => {
     expect(result.page).toBe(3);
     expect(result.limit).toBe(10);
     expect(result.pages).toBe(10);
-    expect(repo.findAndCount).toHaveBeenCalledWith({
+    expect(findAndCount).toHaveBeenCalledWith({
       where: {},
       order: { name: 'ASC' },
       skip: 20, // (3 - 1) * 10
@@ -86,7 +92,7 @@ describe('BrandService — pagination (Phase 2)', () => {
   });
 
   it('filters by isActive when specified', async () => {
-    repo.findAndCount.mockResolvedValue([[], 0]);
+    findAndCount.mockResolvedValue([[], 0]);
 
     const query: BrandQueryDto = Object.assign(new BrandQueryDto(), {
       isActive: false,
@@ -94,7 +100,7 @@ describe('BrandService — pagination (Phase 2)', () => {
 
     await service.list(query);
 
-    expect(repo.findAndCount).toHaveBeenCalledWith({
+    expect(findAndCount).toHaveBeenCalledWith({
       where: { isActive: false },
       order: { name: 'ASC' },
       skip: 0,
@@ -103,7 +109,7 @@ describe('BrandService — pagination (Phase 2)', () => {
   });
 
   it('returns at least 1 page when total is 0', async () => {
-    repo.findAndCount.mockResolvedValue([[], 0]);
+    findAndCount.mockResolvedValue([[], 0]);
 
     const query = new BrandQueryDto();
     const result = await service.list(query);
@@ -114,7 +120,7 @@ describe('BrandService — pagination (Phase 2)', () => {
   });
 
   it('calculates pages correctly for exact multiples', async () => {
-    repo.findAndCount.mockResolvedValue([[], 50]);
+    findAndCount.mockResolvedValue([[], 50]);
 
     const query: BrandQueryDto = Object.assign(new BrandQueryDto(), {
       limit: 25,
@@ -126,7 +132,7 @@ describe('BrandService — pagination (Phase 2)', () => {
   });
 
   it('rounds up pages for non-exact totals', async () => {
-    repo.findAndCount.mockResolvedValue([[], 51]);
+    findAndCount.mockResolvedValue([[], 51]);
 
     const query: BrandQueryDto = Object.assign(new BrandQueryDto(), {
       limit: 25,
