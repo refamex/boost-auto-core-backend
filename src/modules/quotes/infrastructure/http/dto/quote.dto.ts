@@ -33,10 +33,15 @@ export class CreateQuoteItemDto {
   qty!: number;
 
   /**
-   * Absolute tax amount for the line, matching CreateOrderItemDto. There is no
-   * tax-rate concept in this service, so the caller supplies the amount.
+   * @deprecated Accepted and IGNORED, matching CreateOrderItemDto. Tax is
+   * computed server-side from `TAX_RATE`. Still accepted only because the
+   * global ValidationPipe runs `forbidNonWhitelisted`, so removing the field
+   * would 400 callers that have not stopped sending it yet.
    */
-  @ApiPropertyOptional({ default: 0 })
+  @ApiPropertyOptional({
+    deprecated: true,
+    description: 'Ignored. Tax is computed server-side.',
+  })
   @IsNumber()
   @Min(0)
   @IsOptional()

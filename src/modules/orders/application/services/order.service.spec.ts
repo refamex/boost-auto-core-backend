@@ -1,10 +1,20 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
+import { round2 } from '../../domain/order-pricing';
 import { CreateOrderDto } from '../../infrastructure/http/dto/order.dto';
 import { OrderService } from './order.service';
 
 const ORDER_ID = 'order-1';
+const TAX_RATE = 0.16;
+/** What `pim.product.price` says for product 1 unless a test overrides it. */
+const CATALOGUE_PRICE = 100;
 
 const customer: AuthenticatedUser = { id: 'customer-1', roles: [] };
 const staff: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
@@ -75,6 +85,9 @@ describe('OrderService', () => {
   // the confirmed-status branch unobservable from a test.
   const inventoryRepo = { findBySkuAndBranch: jest.fn() };
   const events = { emit: jest.fn() };
+  const priceLists = { findApplicableOrNull: jest.fn() };
+  const priceListItems = { tryResolveApplicablePrice: jest.fn() };
+  const config = { get: jest.fn(() => TAX_RATE) };
 
   let service: OrderService;
 
@@ -101,11 +114,23 @@ describe('OrderService', () => {
     });
   }
 
+  /** The order payload handed to the transactional save, whatever it was. */
+  const persistedOrder = (): Partial<OrderEntity> =>
+    orderTxRepo.create.mock.calls.at(-1)?.[0] as Partial<OrderEntity>;
+
+  /** The order item rows handed to the transactional save. */
+  const persistedItems = (): Partial<OrderItemEntity>[] =>
+    itemTxRepo.save.mock.calls.at(-1)?.[0] as Partial<OrderItemEntity>[];
+
   beforeEach(() => {
     jest.clearAllMocks();
     productRepo.find.mockResolvedValue([
-      { id: 1, sku: 'SKU-1', name: 'Widget' },
+      { id: 1, sku: 'SKU-1', name: 'Widget', price: CATALOGUE_PRICE },
     ]);
+    // Default: a catalogue with no price lists at all, so pricing falls back
+    // to pim.product.price. Tests that care override these two.
+    priceLists.findApplicableOrNull.mockResolvedValue(null);
+    priceListItems.tryResolveApplicablePrice.mockResolvedValue(null);
     inventoryRepo.findBySkuAndBranch.mockResolvedValue({ id: 10 });
     orderTxRepo.findOne.mockResolvedValue(makeOrder());
     service = new OrderService(
@@ -118,6 +143,9 @@ describe('OrderService', () => {
       {} as never,
       inventoryRepo as never,
       events as never,
+      priceLists as never,
+      priceListItems as never,
+      config as never,
     );
   });
 
@@ -225,6 +253,180 @@ describe('OrderService', () => {
     });
   });
 
+  // The hole this module was built to close: totals used to be whatever the
+  // request body said, and `PolarCheckoutService` charges `grandTotal` verbatim.
+  describe('create: server-side pricing', () => {
+    beforeEach(() => readBackPersistedOrder());
+
+    it('rejects a client claiming a price the server does not agree with, and writes no row', async () => {
+      await expect(
+        service.create(
+          makeCreateDto({ items: [{ productId: 1, qty: 1, unitPrice: 0.01 }] }),
+          customer,
+        ),
+      ).rejects.toThrow(ConflictException);
+
+      expect(orderTxRepo.save).not.toHaveBeenCalled();
+      expect(itemTxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('names the product in the conflict so a stale cart knows what to refresh', async () => {
+      await expect(
+        service.create(
+          makeCreateDto({ items: [{ productId: 1, qty: 1, unitPrice: 0.01 }] }),
+          customer,
+        ),
+      ).rejects.toThrow(/SKU-1/);
+    });
+
+    it('prices from the catalogue when the caller asserts nothing', async () => {
+      await service.create(
+        makeCreateDto({ items: [{ productId: 1, qty: 2 }] }),
+        customer,
+      );
+
+      expect(persistedItems()[0]).toMatchObject({
+        unitPriceSnapshot: CATALOGUE_PRICE,
+        qty: 2,
+        taxSnapshot: 32, // 200 * 0.16
+        lineTotal: 232,
+      });
+      expect(persistedOrder()).toMatchObject({
+        subtotal: 200,
+        taxTotal: 32,
+        grandTotal: 232,
+      });
+    });
+
+    it('prefers the price list over pim.product.price', async () => {
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-1',
+        code: 'WHOLESALE',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 80 });
+
+      await service.create(
+        makeCreateDto({
+          priceListCode: 'WHOLESALE',
+          items: [{ productId: 1, qty: 1 }],
+        }),
+        customer,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('WHOLESALE');
+      expect(persistedItems()[0]).toMatchObject({ unitPriceSnapshot: 80 });
+      expect(persistedOrder()).toMatchObject({ grandTotal: 92.8 });
+    });
+
+    it('resolves the price list once per order, not once per line', async () => {
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-1',
+        code: 'RETAIL',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 50 });
+      productRepo.find.mockResolvedValue([
+        { id: 1, sku: 'SKU-1', name: 'Widget', price: CATALOGUE_PRICE },
+        { id: 2, sku: 'SKU-2', name: 'Gadget', price: CATALOGUE_PRICE },
+      ]);
+
+      await service.create(
+        makeCreateDto({
+          items: [
+            { productId: 1, qty: 1 },
+            { productId: 2, qty: 1 },
+          ],
+        }),
+        customer,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledTimes(1);
+      expect(priceListItems.tryResolveApplicablePrice).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to pim.product.price when the list does not cover the product', async () => {
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-1',
+        code: 'RETAIL',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue(null);
+
+      await service.create(
+        makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+        customer,
+      );
+
+      expect(persistedItems()[0]).toMatchObject({
+        unitPriceSnapshot: CATALOGUE_PRICE,
+      });
+    });
+
+    it('refuses with 422 when neither the list nor the catalogue prices the product', async () => {
+      productRepo.find.mockResolvedValue([
+        { id: 1, sku: 'SKU-1', name: 'Widget', price: null },
+      ]);
+
+      await expect(
+        service.create(
+          makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+          customer,
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(orderTxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('ignores a tax amount in the request body and computes its own', async () => {
+      await service.create(
+        makeCreateDto({
+          items: [{ productId: 1, qty: 1, tax: 9999 }],
+        }),
+        customer,
+      );
+
+      expect(persistedItems()[0]).toMatchObject({ taxSnapshot: 16 });
+      expect(persistedOrder()).toMatchObject({ taxTotal: 16 });
+    });
+
+    it('reads the rate from config rather than hardcoding one', async () => {
+      config.get.mockReturnValue(0.08);
+
+      await service.create(
+        makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+        customer,
+      );
+
+      expect(persistedItems()[0]).toMatchObject({ taxSnapshot: 8 });
+      config.get.mockReturnValue(TAX_RATE);
+    });
+
+    it('keeps subtotal + taxTotal exactly equal to grandTotal across many lines', async () => {
+      productRepo.find.mockResolvedValue([
+        { id: 1, sku: 'SKU-1', name: 'Widget', price: 33.33 },
+        { id: 2, sku: 'SKU-2', name: 'Gadget', price: 10.99 },
+      ]);
+
+      await service.create(
+        makeCreateDto({
+          items: [
+            { productId: 1, qty: 7 },
+            { productId: 2, qty: 3 },
+          ],
+        }),
+        customer,
+      );
+
+      // 7 * 33.33 = 233.31 (+37.33 tax); 3 * 10.99 = 32.97 (+5.28 tax)
+      expect(persistedOrder()).toMatchObject({
+        subtotal: 266.28,
+        taxTotal: 42.61,
+        grandTotal: 308.89,
+      });
+      // Raw `subtotal + taxTotal` is 308.89000000000004 in binary floating
+      // point, which is exactly why grandTotal goes through round2.
+      const order = persistedOrder();
+      expect(round2(order.subtotal! + order.taxTotal!)).toBe(order.grandTotal);
+    });
+  });
+
   describe('createInternal', () => {
     it('applies no ownership binding and defaults no contact email (Defect B)', async () => {
       orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
@@ -239,6 +441,44 @@ describe('OrderService', () => {
           shipToEmail: undefined,
         }),
       );
+    });
+
+    // A quote is an approved, negotiated document. Re-pricing it at conversion
+    // would discard the price the customer accepted, so the trusted in-process
+    // entry point keeps the snapshot QuoteService already resolved server-side.
+    it('keeps the quote snapshot instead of re-pricing against the catalogue', async () => {
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+
+      await service.createInternal(
+        makeCreateDto({
+          customerId: 'quote-customer',
+          items: [{ productId: 1, qty: 2, unitPrice: 42.5, tax: 13.6 }],
+        }),
+      );
+
+      expect(persistedItems()[0]).toMatchObject({
+        unitPriceSnapshot: 42.5,
+        taxSnapshot: 13.6,
+        lineTotal: 98.6,
+      });
+      expect(persistedOrder()).toMatchObject({
+        subtotal: 85,
+        taxTotal: 13.6,
+        grandTotal: 98.6,
+      });
+      expect(priceLists.findApplicableOrNull).not.toHaveBeenCalled();
+      expect(priceListItems.tryResolveApplicablePrice).not.toHaveBeenCalled();
+    });
+
+    it('refuses a snapshot line with no unit price rather than persisting a free order', async () => {
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+
+      await expect(
+        service.createInternal(
+          makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+        ),
+      ).rejects.toThrow(UnprocessableEntityException);
+      expect(orderTxRepo.save).not.toHaveBeenCalled();
     });
   });
 

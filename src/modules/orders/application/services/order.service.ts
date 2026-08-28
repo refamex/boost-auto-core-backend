@@ -4,12 +4,19 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { AppConfig } from '../../../../shared/config/configuration';
+import { PriceListItemService } from '../../../commerce/application/services/price-list-item.service';
+import { PriceListService } from '../../../commerce/application/services/price-list.service';
+import { PriceListEntity } from '../../../commerce/domain/entities/price-list.entity';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
@@ -23,6 +30,11 @@ import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderPaymentEntity } from '../../domain/entities/order-payment.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
 import {
+  priceLine,
+  quotedPriceMatches,
+  round2,
+} from '../../domain/order-pricing';
+import {
   bindCreate,
   buildWhere,
   OrderCreateBinding,
@@ -34,8 +46,28 @@ import {
   UpdateOrderDto,
 } from '../../infrastructure/http/dto/order.dto';
 
+/**
+ * Where a line's unit price comes from.
+ *
+ * `server` — untrusted HTTP caller: resolve every price from the price list or
+ * the catalogue and verify anything the caller claimed.
+ * `snapshot` — trusted in-process caller (`QuoteService.convert`): keep the
+ * approved quote's frozen prices, which `QuoteService` already resolved
+ * server-side. Re-pricing here would discard the negotiated amount the
+ * customer accepted.
+ */
+type PricingMode = 'server' | 'snapshot';
+
+interface PricedOrder {
+  subtotal: number;
+  taxTotal: number;
+  items: Partial<OrderItemEntity>[];
+}
+
 @Injectable()
 export class OrderService {
+  private readonly logger = new Logger(OrderService.name);
+
   constructor(
     @InjectRepository(OrderEntity)
     private readonly orderRepo: Repository<OrderEntity>,
@@ -51,6 +83,9 @@ export class OrderService {
     @Inject(INVENTORY_REPOSITORY)
     private readonly inventoryRepo: InventoryRepository,
     private readonly events: EventEmitter2,
+    private readonly priceLists: PriceListService,
+    private readonly priceListItems: PriceListItemService,
+    private readonly config: ConfigService<AppConfig, true>,
   ) {}
 
   /**
@@ -109,7 +144,7 @@ export class OrderService {
         'customerId must match the authenticated customer',
       );
     }
-    return this.persist(dto, bound, actor.email);
+    return this.persist(dto, bound, 'server', actor.email);
   }
 
   /**
@@ -123,6 +158,7 @@ export class OrderService {
     return this.persist(
       dto,
       { customerId: dto.customerId, status: dto.status ?? 'draft' },
+      'snapshot',
       undefined,
     );
   }
@@ -130,14 +166,19 @@ export class OrderService {
   private async persist(
     dto: CreateOrderDto,
     bound: OrderCreateBinding,
+    pricing: PricingMode,
     contactEmail?: string,
   ): Promise<OrderEntity> {
-    const created = await this.dataSource.transaction(async (tx) => {
-      const products = await this.loadProducts(
-        dto.items.map((i) => i.productId),
-      );
-      const { subtotal, taxTotal, items } = this.buildItems(dto, products);
+    // Priced before the transaction opens: resolution is read-only and can
+    // reject (409/422), and holding a write transaction open across those
+    // lookups buys nothing.
+    const products = await this.loadProducts(dto.items.map((i) => i.productId));
+    const { subtotal, taxTotal, items } =
+      pricing === 'server'
+        ? await this.priceLines(dto, products)
+        : this.snapshotLines(dto, products);
 
+    const created = await this.dataSource.transaction(async (tx) => {
       const order = await tx.getRepository(OrderEntity).save(
         tx.getRepository(OrderEntity).create({
           orderNumber: this.generateOrderNumber(),
@@ -153,7 +194,7 @@ export class OrderService {
           shipToEmail: dto.shipToEmail ?? contactEmail,
           subtotal,
           taxTotal,
-          grandTotal: subtotal + taxTotal,
+          grandTotal: round2(subtotal + taxTotal),
           discountTotal: 0,
           shippingTotal: 0,
         }),
@@ -335,20 +376,141 @@ export class OrderService {
     return map;
   }
 
-  private buildItems(
+  /**
+   * Prices an order for an untrusted caller.
+   *
+   * Every unit price is resolved here. `line.unitPrice` is only ever *checked*
+   * against the result, and `line.tax` is discarded outright — before this, both
+   * were copied straight into `grand_total`, which `PolarCheckoutService`
+   * charges verbatim.
+   */
+  private async priceLines(
     dto: CreateOrderDto,
     products: Map<number, ProductEntity>,
-  ): { subtotal: number; taxTotal: number; items: Partial<OrderItemEntity>[] } {
+  ): Promise<PricedOrder> {
+    // One list per order, not per line, so a misconfigured catalogue reports
+    // itself plainly instead of as an unpriceable product (as in QuoteService).
+    const priceList = await this.priceLists.findApplicableOrNull(
+      dto.priceListCode,
+    );
+    // A single instant for the whole order: two lines of the same order must
+    // never straddle a price list's validity boundary.
+    const asOf = new Date();
+    const taxRate = this.config.get('tax.rate', { infer: true });
+
+    if (dto.items.some((line) => line.tax !== undefined)) {
+      this.logger.warn(
+        'order create supplied a tax amount; ignoring it and computing tax server-side',
+      );
+    }
+
     let subtotal = 0;
     let taxTotal = 0;
     const items: Partial<OrderItemEntity>[] = [];
 
     for (const line of dto.items) {
       const product = products.get(line.productId)!;
-      const tax = line.tax ?? 0;
-      const lineTotal = line.qty * line.unitPrice + tax;
-      subtotal += line.qty * line.unitPrice;
-      taxTotal += tax;
+      const unitPrice = await this.resolveUnitPrice(
+        priceList,
+        product,
+        line.qty,
+        asOf,
+      );
+
+      // A caller that named a price is telling us what it displayed. If that
+      // disagrees, its cart is stale (or forged) and it must be sent back to
+      // refresh — charging a different amount than the one shown is not an
+      // option, and neither is charging the one it claimed.
+      if (
+        line.unitPrice !== undefined &&
+        !quotedPriceMatches(line.unitPrice, unitPrice)
+      ) {
+        throw new ConflictException(
+          `price for ${product.sku} changed to ${unitPrice}; refresh the cart and retry`,
+        );
+      }
+
+      const { net, tax, lineTotal } = priceLine({
+        qty: line.qty,
+        unitPrice,
+        taxRate,
+      });
+      subtotal = round2(subtotal + net);
+      taxTotal = round2(taxTotal + tax);
+      items.push({
+        productId: line.productId,
+        skuSnapshot: product.sku,
+        nameSnapshot: product.name ?? product.sku,
+        qty: line.qty,
+        unitPriceSnapshot: unitPrice,
+        taxSnapshot: tax,
+        lineTotal,
+      });
+    }
+
+    return { subtotal, taxTotal, items };
+  }
+
+  /**
+   * The price list wins where it covers the product; `pim.product.price` is the
+   * fallback, because the storefront catalogue is priced there today and not
+   * every SKU has a list entry. A product priced by neither is a 422 — never a
+   * zero, which would be a free order.
+   */
+  private async resolveUnitPrice(
+    priceList: PriceListEntity | null,
+    product: ProductEntity,
+    qty: number,
+    asOf: Date,
+  ): Promise<number> {
+    if (priceList) {
+      const priced = await this.priceListItems.tryResolveApplicablePrice(
+        priceList.id,
+        product.id,
+        qty,
+        asOf,
+      );
+      if (priced) return priced.price;
+    }
+
+    const catalogue = product.price;
+    if (typeof catalogue === 'number' && Number.isFinite(catalogue)) {
+      return catalogue;
+    }
+
+    throw new UnprocessableEntityException(
+      `product ${product.id} (${product.sku}) has no price` +
+        (priceList ? ` in price list ${priceList.code} or the catalogue` : ''),
+    );
+  }
+
+  /**
+   * Keeps a trusted caller's already-resolved prices. Only `QuoteService`
+   * reaches this, via `createInternal`, carrying an approved quote's snapshot.
+   */
+  private snapshotLines(
+    dto: CreateOrderDto,
+    products: Map<number, ProductEntity>,
+  ): PricedOrder {
+    let subtotal = 0;
+    let taxTotal = 0;
+    const items: Partial<OrderItemEntity>[] = [];
+
+    for (const line of dto.items) {
+      const product = products.get(line.productId)!;
+      if (line.unitPrice === undefined) {
+        // Unreachable from a quote, which always snapshots a price. Guarded
+        // anyway: `unitPrice` is optional on the DTO now, and defaulting it to
+        // zero here would silently produce a free order.
+        throw new UnprocessableEntityException(
+          `internal order line for product ${product.id} carries no unit price`,
+        );
+      }
+
+      const net = round2(line.qty * line.unitPrice);
+      const tax = round2(line.tax ?? 0);
+      subtotal = round2(subtotal + net);
+      taxTotal = round2(taxTotal + tax);
       items.push({
         productId: line.productId,
         skuSnapshot: product.sku,
@@ -356,7 +518,7 @@ export class OrderService {
         qty: line.qty,
         unitPriceSnapshot: line.unitPrice,
         taxSnapshot: tax,
-        lineTotal,
+        lineTotal: round2(net + tax),
       });
     }
 

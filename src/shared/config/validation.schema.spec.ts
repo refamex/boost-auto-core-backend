@@ -46,3 +46,36 @@ describe('validationSchema — JWT_MODE vs NODE_ENV (D9)', () => {
     expect(error).toBeUndefined();
   });
 });
+
+describe('validationSchema — TAX_RATE', () => {
+  /** Joi types `value` as `any`; narrow it once instead of casting per call. */
+  const rateOf = (env: Record<string, string>): unknown =>
+    (validationSchema.validate(env).value as Record<string, unknown>).TAX_RATE;
+
+  it('defaults to 16% when unset', () => {
+    const { error } = validationSchema.validate(baseEnv);
+
+    expect(error).toBeUndefined();
+    expect(rateOf(baseEnv)).toBe(0.16);
+  });
+
+  it('accepts a fraction inside [0, 1]', () => {
+    expect(rateOf({ ...baseEnv, TAX_RATE: '0.08' })).toBe(0.08);
+    expect(rateOf({ ...baseEnv, TAX_RATE: '0' })).toBe(0);
+  });
+
+  it('refuses a percent, which would tax an order 1600x over', () => {
+    const { error } = validationSchema.validate({ ...baseEnv, TAX_RATE: '16' });
+
+    expect(error?.message).toContain('TAX_RATE');
+  });
+
+  it('refuses a negative rate', () => {
+    const { error } = validationSchema.validate({
+      ...baseEnv,
+      TAX_RATE: '-0.1',
+    });
+
+    expect(error?.message).toContain('TAX_RATE');
+  });
+});

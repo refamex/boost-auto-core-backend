@@ -96,4 +96,33 @@ describe('PriceListItemService.resolveApplicablePrice', () => {
       service.resolveApplicablePrice('list-1', 42, 3, new Date()),
     ).rejects.toThrow(/product 42/);
   });
+
+  describe('tryResolveApplicablePrice', () => {
+    it('returns the same item the throwing variant resolves', async () => {
+      const found = await service.tryResolveApplicablePrice(
+        'list-1',
+        42,
+        10,
+        new Date(),
+      );
+      expect(found?.price).toBe(1250);
+    });
+
+    it('answers null instead of throwing when nothing applies', async () => {
+      qb.getOne.mockResolvedValue(null);
+      await expect(
+        service.tryResolveApplicablePrice('list-1', 42, 3, new Date()),
+      ).resolves.toBeNull();
+    });
+
+    it('issues the identical query, so the two variants cannot drift', async () => {
+      await service.tryResolveApplicablePrice('list-1', 42, 10, new Date());
+      const tried = conditions();
+      jest.clearAllMocks();
+      qb.getOne.mockResolvedValue({ id: 'tier-10', price: 1250, minQty: 10 });
+
+      await service.resolveApplicablePrice('list-1', 42, 10, new Date());
+      expect(tried).toBe(conditions());
+    });
+  });
 });

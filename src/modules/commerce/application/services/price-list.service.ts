@@ -37,19 +37,32 @@ export class PriceListService {
    * reports itself plainly instead of surfacing as an unpriceable product.
    */
   async findApplicable(code?: string): Promise<PriceListEntity> {
+    const found = await this.findApplicableOrNull(code);
+    if (!found) {
+      throw new BadRequestException(
+        'no default price list configured; send priceListCode explicitly',
+      );
+    }
+    return found;
+  }
+
+  /**
+   * Same resolution, `null` when no default list is configured.
+   *
+   * A catalogue that does not use price lists at all is not an error for
+   * orders — they fall back to `pim.product.price`. A price list named
+   * explicitly and *missing* still throws: pricing off something other than the
+   * list the caller asked for would hide the misconfiguration behind a wrong
+   * charge, which is the whole class of bug this module is closing.
+   */
+  async findApplicableOrNull(code?: string): Promise<PriceListEntity | null> {
     if (code) {
       const byCode = await this.repo.findOne({ where: { code } });
       if (!byCode) throw new NotFoundException(`PriceList ${code} not found`);
       return byCode;
     }
 
-    const fallback = await this.repo.findOne({ where: { isDefault: true } });
-    if (!fallback) {
-      throw new BadRequestException(
-        'no default price list configured; send priceListCode explicitly',
-      );
-    }
-    return fallback;
+    return this.repo.findOne({ where: { isDefault: true } });
   }
 
   async create(dto: CreatePriceListDto): Promise<PriceListEntity> {

@@ -53,8 +53,37 @@ export class PriceListItemService {
     qty: number,
     asOf: Date,
   ): Promise<PriceListItemEntity> {
+    const found = await this.tryResolveApplicablePrice(
+      priceListId,
+      productId,
+      qty,
+      asOf,
+    );
+    if (!found) {
+      throw new NotFoundException(
+        `no applicable price for product ${productId} at qty ${qty} in price list ${priceListId}`,
+      );
+    }
+    return found;
+  }
+
+  /**
+   * Same resolution, `null` instead of a 404.
+   *
+   * Orders price off the list when it covers the product and fall back to
+   * `pim.product.price` when it does not, so for them an uncovered line is an
+   * ordinary outcome rather than an error. Quotes keep the throwing variant
+   * above and stay fail-closed. Both go through this one query so the two can
+   * never disagree about which tier applies.
+   */
+  tryResolveApplicablePrice(
+    priceListId: string,
+    productId: number,
+    qty: number,
+    asOf: Date,
+  ): Promise<PriceListItemEntity | null> {
     const day = asOf.toISOString().slice(0, 10); // valid_from / valid_to are DATE
-    const found = await this.repo
+    return this.repo
       .createQueryBuilder('i')
       .innerJoinAndSelect('i.priceList', 'pl')
       .where('i.price_list_id = :priceListId', { priceListId })
@@ -66,13 +95,6 @@ export class PriceListItemService {
       .addOrderBy('i.created_at', 'DESC')
       .limit(1)
       .getOne();
-
-    if (!found) {
-      throw new NotFoundException(
-        `no applicable price for product ${productId} at qty ${qty} in price list ${priceListId}`,
-      );
-    }
-    return found;
   }
 
   async create(
