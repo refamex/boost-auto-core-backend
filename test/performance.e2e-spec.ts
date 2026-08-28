@@ -115,7 +115,11 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
       }),
     );
 
-    await app.init();
+    // `listen`, not `init`: supertest binds a non-listening server to an
+    // ephemeral port per request, so the concurrent suites below raced ten
+    // simultaneous binds against the same server object and lost connections
+    // to ECONNRESET. Listening once removes the race.
+    await app.listen(0);
   });
 
   afterAll(async () => {
