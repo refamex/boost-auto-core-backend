@@ -93,7 +93,12 @@ describeWithDocker('Performance benchmarks (e2e) — Phase 8', () => {
       }),
     );
 
-    await app.init();
+    // listen(0), not init(): init() leaves the server unbound, so supertest
+    // binds it itself on first use. The concurrency tests below build ten
+    // Test instances at once, each racing to listen(0) on this same server —
+    // one wins and the rest reset the connection. Binding once here removes
+    // the race; an ephemeral port keeps parallel jest workers independent.
+    await app.listen(0);
   });
 
   afterAll(async () => {
