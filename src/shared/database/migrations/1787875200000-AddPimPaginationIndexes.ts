@@ -19,9 +19,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * IF NOT EXISTS guards ensure this is safe to run in any environment,
  * including local databases that may have manually created these indexes.
  */
-export class AddPimPaginationIndexes1787875200000
-  implements MigrationInterface
-{
+export class AddPimPaginationIndexes1787875200000 implements MigrationInterface {
   name = 'AddPimPaginationIndexes1787875200000';
 
   private readonly indexes: Array<{

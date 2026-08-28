@@ -12,6 +12,7 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { describeWithDocker } from './docker-gate';
+import { Paginated, TaxonomyRow, bodyOf, rowsOf } from './typed-results';
 
 /**
  * Phase 7: Integration Testing — PIM Pagination
@@ -111,17 +112,18 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body).toMatchObject({
-        items: expect.any(Array),
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body).toMatchObject({
+        items: expect.any(Array) as unknown[],
         total: 6,
         page: 1,
         limit: 25,
         pages: 1,
       });
-      expect(res.body.items).toHaveLength(6);
+      expect(body.items).toHaveLength(6);
       // Verify sort order (ascending by name)
-      expect(res.body.items[0].name).toBe('Alpha Brand');
-      expect(res.body.items[1].name).toBe('Beta Brand');
+      expect(body.items[0].name).toBe('Alpha Brand');
+      expect(body.items[1].name).toBe('Beta Brand');
     });
 
     it('applies custom page and limit', async () => {
@@ -130,15 +132,16 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body).toMatchObject({
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body).toMatchObject({
         total: 6,
         page: 2,
         limit: 2,
         pages: 3,
       });
-      expect(res.body.items).toHaveLength(2);
+      expect(body.items).toHaveLength(2);
       // Page 2 with limit 2 should skip first 2 items
-      expect(res.body.items[0].name).toBe('Charlie Brand');
+      expect(body.items[0].name).toBe('Charlie Brand');
     });
 
     it('filters by isActive=true', async () => {
@@ -147,8 +150,9 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body.total).toBe(5); // All except Echo Brand
-      expect(res.body.items.every((b: any) => b.isActive === true)).toBe(true);
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body.total).toBe(5); // All except Echo Brand
+      expect(body.items.every((b) => b.isActive === true)).toBe(true);
     });
 
     it('filters by isActive=false', async () => {
@@ -158,8 +162,9 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .expect(200);
 
       // At least Echo Brand should be inactive (may have more from previous tests)
-      expect(res.body.total).toBeGreaterThanOrEqual(1);
-      const echoFound = res.body.items.find((b: any) => b.name === 'Echo Brand');
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body.total).toBeGreaterThanOrEqual(1);
+      const echoFound = body.items.find((b) => b.name === 'Echo Brand');
       expect(echoFound).toBeDefined();
       expect(echoFound?.isActive).toBe(false);
     });
@@ -170,7 +175,7 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body).toMatchObject({
+      expect(bodyOf<Paginated<TaxonomyRow>>(res)).toMatchObject({
         items: [],
         total: 6,
         page: 10,
@@ -197,10 +202,11 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body.total).toBe(3);
-      expect(res.body.items[0].code).toBe('DEPT-001');
-      expect(res.body.items[1].code).toBe('DEPT-002');
-      expect(res.body.items[2].code).toBe('DEPT-003');
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body.total).toBe(3);
+      expect(body.items[0].code).toBe('DEPT-001');
+      expect(body.items[1].code).toBe('DEPT-002');
+      expect(body.items[2].code).toBe('DEPT-003');
     });
 
     it('filters departments by isActive', async () => {
@@ -209,8 +215,9 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      expect(res.body.total).toBe(2);
-      expect(res.body.items.every((d: any) => d.isActive === true)).toBe(true);
+      const body = bodyOf<Paginated<TaxonomyRow>>(res);
+      expect(body.total).toBe(2);
+      expect(body.items.every((d) => d.isActive === true)).toBe(true);
     });
   });
 
@@ -231,7 +238,9 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
     });
 
     it('verifies indexes exist in database', async () => {
-      const indexes = await dataSource.query(`
+      const indexes = await rowsOf<{ indexname: string }>(
+        dataSource,
+        `
         SELECT indexname
         FROM pg_indexes
         WHERE schemaname = 'pim'
@@ -242,9 +251,10 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
             'idx_department_active_code'
           )
         ORDER BY indexname
-      `);
+      `,
+      );
 
-      const indexNames = indexes.map((r: any) => r.indexname);
+      const indexNames = indexes.map((r) => r.indexname);
 
       expect(indexNames).toContain('idx_brand_active_name');
       expect(indexNames).toContain('idx_category_active_code');
@@ -258,19 +268,26 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
 
     beforeAll(async () => {
       // First insert department and get its id
-      const deptResult = await dataSource.query(`
+      const deptResult = await rowsOf<{ id: number }>(
+        dataSource,
+        `
         INSERT INTO pim.category_department (code, department_name, is_active)
         VALUES ('DEPT-100', 'Test Department', true)
         RETURNING id
-      `);
+      `,
+      );
       const deptId = deptResult[0].id;
 
       // Then insert category with the department id
-      const result = await dataSource.query(`
+      const result = await rowsOf<{ id: number }>(
+        dataSource,
+        `
         INSERT INTO pim.category (code, name, id_department, is_active)
         VALUES ('CAT-SOFT', 'Test Category for Soft Delete', $1, true)
         RETURNING id
-      `, [deptId]);
+      `,
+        [deptId],
+      );
       categoryId = result[0].id;
     });
 
@@ -281,7 +298,12 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .expect(204); // DELETE returns 204 No Content
 
       // Verify category still exists but isActive=false
-      const category = await dataSource.query(
+      const category = await rowsOf<{
+        id: number;
+        code: string;
+        is_active: boolean;
+      }>(
+        dataSource,
         `SELECT id, code, is_active FROM pim.category WHERE id = $1`,
         [categoryId],
       );
@@ -297,9 +319,9 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      const softDeletedCategory = res.body.items.find(
-        (c: any) => c.id === categoryId,
-      );
+      const softDeletedCategory = bodyOf<Paginated<TaxonomyRow>>(
+        res,
+      ).items.find((c) => c.id === categoryId);
 
       expect(softDeletedCategory).toBeUndefined();
     });
@@ -310,13 +332,13 @@ describeWithDocker('PIM pagination (e2e) — Phase 7', () => {
         .set(adminHeaders())
         .expect(200);
 
-      const softDeletedCategory = res.body.items.find(
-        (c: any) => c.id === categoryId,
-      );
+      const softDeletedCategory = bodyOf<Paginated<TaxonomyRow>>(
+        res,
+      ).items.find((c) => c.id === categoryId);
 
       expect(softDeletedCategory).toBeDefined();
-      expect(softDeletedCategory.code).toBe('CAT-SOFT');
-      expect(softDeletedCategory.isActive).toBe(false);
+      expect(softDeletedCategory?.code).toBe('CAT-SOFT');
+      expect(softDeletedCategory?.isActive).toBe(false);
     });
   });
 });

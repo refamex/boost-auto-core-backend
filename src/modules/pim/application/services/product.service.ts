@@ -78,11 +78,7 @@ export class ProductService {
   ): Promise<PaginatedResult<ProductEntity>> {
     const qb = this.repo
       .createQueryBuilder('p')
-      .innerJoin(
-        'compatibility.compatibilities',
-        'c',
-        'c.product_id = p.id',
-      )
+      .innerJoin('compatibility.compatibilities', 'c', 'c.product_id = p.id')
       .leftJoinAndSelect('p.brand', 'brand')
       .leftJoinAndSelect('p.category', 'category')
       .leftJoinAndSelect('p.autoPartType', 'autoPart')
