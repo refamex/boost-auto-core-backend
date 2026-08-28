@@ -21,9 +21,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * IF NOT EXISTS guard ensures this is safe to run in any environment.
  */
-export class AddVehicleCompatibilityIndexes1787961600000
-  implements MigrationInterface
-{
+export class AddVehicleCompatibilityIndexes1787961600000 implements MigrationInterface {
   name = 'AddVehicleCompatibilityIndexes1787961600000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
