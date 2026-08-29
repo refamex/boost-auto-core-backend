@@ -28,6 +28,7 @@ import { ReleaseStockUseCase } from '../../../inventory/application/use-cases/re
 import { ReserveStockUseCase } from '../../../inventory/application/use-cases/reserve-stock.use-case';
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderPaymentEntity } from '../../domain/entities/order-payment.entity';
+import { OrderStatusEventEntity } from '../../domain/entities/order-status-event.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
 import {
   priceLine,
@@ -86,6 +87,8 @@ export class OrderService {
     private readonly priceLists: PriceListService,
     private readonly priceListItems: PriceListItemService,
     private readonly config: ConfigService<AppConfig, true>,
+    @InjectRepository(OrderStatusEventEntity)
+    private readonly statusEvents: Repository<OrderStatusEventEntity>,
   ) {}
 
   /**
@@ -144,7 +147,7 @@ export class OrderService {
         'customerId must match the authenticated customer',
       );
     }
-    return this.persist(dto, bound, 'server', actor.email);
+    return this.persist(dto, bound, 'server', actor.email, actor);
   }
 
   /**
@@ -168,6 +171,7 @@ export class OrderService {
     bound: OrderCreateBinding,
     pricing: PricingMode,
     contactEmail?: string,
+    actor?: AuthenticatedUser,
   ): Promise<OrderEntity> {
     // Priced before the transaction opens: resolution is read-only and can
     // reject (409/422), and holding a write transaction open across those
@@ -210,6 +214,19 @@ export class OrderService {
           ),
         );
 
+      // El primer punto de la línea de tiempo. Sin él, el historial arranca en
+      // la segunda transición y una orden recién creada se ve como si nadie la
+      // hubiera creado.
+      await tx.getRepository(OrderStatusEventEntity).save(
+        tx.getRepository(OrderStatusEventEntity).create({
+          orderId: order.id,
+          fromStatus: null,
+          toStatus: order.status,
+          actorId: actor?.id ?? null,
+          actorEmail: actor?.email ?? contactEmail ?? null,
+        }),
+      );
+
       const full = await tx.getRepository(OrderEntity).findOne({
         where: { id: order.id },
         relations: ['items', 'items.product'],
@@ -235,7 +252,7 @@ export class OrderService {
     return this.orderRepo.save(this.orderRepo.merge(existing, dto));
   }
 
-  async confirm(id: string): Promise<OrderEntity> {
+  async confirm(id: string, actor?: AuthenticatedUser): Promise<OrderEntity> {
     const order = await this.loadForWrite(id);
     if (order.status === 'confirmed') {
       throw new ConflictException('order is already confirmed');
@@ -244,8 +261,7 @@ export class OrderService {
       throw new ConflictException('cannot confirm a cancelled order');
     }
     await this.reserveForOrder(order);
-    order.status = 'confirmed';
-    const saved = await this.orderRepo.save(order);
+    const saved = await this.transitionTo(order, 'confirmed', actor);
     this.emit('order.confirmed', saved);
     return saved;
   }
@@ -258,7 +274,7 @@ export class OrderService {
    * showing "En preparación". Now it is a real transition somebody performs,
    * and one the customer is told about.
    */
-  async prepare(id: string): Promise<OrderEntity> {
+  async prepare(id: string, actor?: AuthenticatedUser): Promise<OrderEntity> {
     const order = await this.loadForWrite(id);
     if (order.status === 'cancelled') {
       throw new ConflictException('cannot prepare a cancelled order');
@@ -268,13 +284,12 @@ export class OrderService {
         `cannot prepare an order in status ${order.status}; confirm it first`,
       );
     }
-    order.status = 'preparing';
-    const saved = await this.orderRepo.save(order);
+    const saved = await this.transitionTo(order, 'preparing', actor);
     this.emit('order.preparing', saved);
     return saved;
   }
 
-  async cancel(id: string): Promise<OrderEntity> {
+  async cancel(id: string, actor?: AuthenticatedUser): Promise<OrderEntity> {
     const order = await this.loadForWrite(id);
     if (order.status === 'cancelled') {
       throw new ConflictException('order is already cancelled');
@@ -284,8 +299,7 @@ export class OrderService {
     if (order.status === 'confirmed' || order.status === 'preparing') {
       await this.releaseForOrder(order);
     }
-    order.status = 'cancelled';
-    const saved = await this.orderRepo.save(order);
+    const saved = await this.transitionTo(order, 'cancelled', actor);
     this.emit('order.cancelled', saved);
     return saved;
   }
@@ -321,6 +335,62 @@ export class OrderService {
    * `cancel`, `addPayment`). Ownership-based write authorization is
    * deliberately out of scope for this change (D2).
    */
+  /**
+   * Moves an order to a new status and records who did it, atomically.
+   *
+   * ONE TRANSACTION, and that is the whole point. A history row that can
+   * survive a failed status change describes a transition that never happened;
+   * a status change that can outlive its event leaves a gap in the trail. An
+   * audit log that is only usually right is not an audit log.
+   *
+   * `actor` is optional because not every transition comes from a person: the
+   * Polar webhook confirms orders with no user context. Recording a null actor
+   * is honest; inventing one to satisfy a column would not be.
+   */
+  private async transitionTo(
+    order: OrderEntity,
+    toStatus: string,
+    actor?: AuthenticatedUser,
+  ): Promise<OrderEntity> {
+    const fromStatus = order.status;
+
+    return this.dataSource.transaction(async (tx) => {
+      order.status = toStatus;
+      const saved = await tx.getRepository(OrderEntity).save(order);
+
+      await tx.getRepository(OrderStatusEventEntity).save(
+        tx.getRepository(OrderStatusEventEntity).create({
+          orderId: saved.id,
+          fromStatus,
+          toStatus,
+          actorId: actor?.id ?? null,
+          // Frozen, not resolved on read: the address recorded is the one in
+          // use when it happened, even if that person changes it later.
+          actorEmail: actor?.email ?? null,
+        }),
+      );
+
+      return saved;
+    });
+  }
+
+  /**
+   * The trail for one order, oldest first.
+   *
+   * Scoped through the same ownership predicate as `findById`: the history of
+   * an order must never be more visible than the order itself.
+   */
+  async listStatusEvents(
+    id: string,
+    caller: AuthenticatedUser,
+  ): Promise<OrderStatusEventEntity[]> {
+    await this.findById(id, caller);
+    return this.statusEvents.find({
+      where: { orderId: id },
+      order: { occurredAt: 'ASC' },
+    });
+  }
+
   private async loadForWrite(id: string): Promise<OrderEntity> {
     const found = await this.orderRepo.findOne({
       where: { id },

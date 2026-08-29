@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
+import { OrderStatusEventEntity } from '../../domain/entities/order-status-event.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
 import { round2 } from '../../domain/order-pricing';
 import { CreateOrderDto } from '../../infrastructure/http/dto/order.dto';
@@ -71,10 +72,19 @@ describe('OrderService', () => {
     create: jest.fn((x: unknown) => x),
     save: jest.fn((x: unknown) => Promise.resolve(x)),
   };
+  const statusEventTxRepo = {
+    create: jest.fn((x: unknown) => x),
+    save: jest.fn((x: unknown) => Promise.resolve(x)),
+  };
+  const statusEventRepo = {
+    find: jest.fn(),
+  };
   const txRepos = {
-    getRepository: jest.fn((entity: unknown) =>
-      entity === OrderEntity ? orderTxRepo : itemTxRepo,
-    ),
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === OrderEntity) return orderTxRepo;
+      if (entity === OrderStatusEventEntity) return statusEventTxRepo;
+      return itemTxRepo;
+    }),
   };
   const dataSource = {
     transaction: jest.fn((fn: (t: unknown) => unknown) => fn(txRepos)),
@@ -146,6 +156,7 @@ describe('OrderService', () => {
       priceLists as never,
       priceListItems as never,
       config as never,
+      statusEventRepo as never,
     );
   });
 
@@ -525,6 +536,123 @@ describe('OrderService', () => {
       await service.addPayment(ORDER_ID, { amount: 100, status: 'pending' });
       expect(orderRepo.findOne).toHaveBeenCalledWith(
         expect.objectContaining({ where: { id: ORDER_ID } }),
+      );
+    });
+  });
+
+  /**
+   * The audit asked for the lifecycle stepper to show who moved an order. The
+   * cause sat upstream of the UI: nothing recorded an actor, so there was no
+   * data to draw.
+   */
+  describe('status history', () => {
+    beforeEach(() => {
+      statusEventTxRepo.create.mockClear();
+      statusEventTxRepo.save.mockClear();
+    });
+
+    const staff = {
+      id: 'staff-1',
+      email: 'ana@boost.mx',
+      roles: ['orders:write'],
+    };
+
+    it('records who confirmed an order', async () => {
+      const order = makeOrder({ status: 'draft', providerBranchId: 1 });
+      orderRepo.findOne.mockResolvedValue(order);
+      orderTxRepo.findOne.mockResolvedValue(order);
+
+      await service.confirm(ORDER_ID, staff);
+
+      expect(statusEventTxRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: ORDER_ID,
+          fromStatus: 'draft',
+          toStatus: 'confirmed',
+          actorId: 'staff-1',
+          actorEmail: 'ana@boost.mx',
+        }),
+      );
+    });
+
+    it('records the transition when an order is cancelled', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+
+      await service.cancel(ORDER_ID, staff);
+
+      expect(statusEventTxRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ toStatus: 'cancelled', actorId: 'staff-1' }),
+      );
+    });
+
+    /**
+     * The Polar webhook confirms orders with no user context at all. Refusing
+     * the transition, or inventing an actor to satisfy a constraint, would both
+     * be worse than recording honestly that the system did it.
+     */
+    it('records a null actor rather than refusing a transition with no caller', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+
+      await expect(service.cancel(ORDER_ID)).resolves.toBeDefined();
+
+      expect(statusEventTxRepo.save).toHaveBeenCalledWith(
+        expect.objectContaining({ actorId: null, actorEmail: null }),
+      );
+    });
+
+    /**
+     * THE assertion this feature turns on. The event and the status change go
+     * through the same `dataSource.transaction`, so a history row can never
+     * describe a transition that did not happen — nor a transition go
+     * unrecorded.
+     */
+    it('writes the event through the same transaction as the status change', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+
+      await service.cancel(ORDER_ID, staff);
+
+      expect(txRepos.getRepository).toHaveBeenCalledWith(
+        OrderStatusEventEntity,
+      );
+      expect(statusEventTxRepo.save).toHaveBeenCalled();
+    });
+
+    it('leaves no history behind when the status change fails', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+      orderTxRepo.findOne.mockResolvedValue(makeOrder({ status: 'draft' }));
+      orderTxRepo.save.mockRejectedValueOnce(new Error('write conflict'));
+
+      await expect(service.cancel(ORDER_ID, staff as never)).rejects.toThrow(
+        'write conflict',
+      );
+
+      expect(statusEventTxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses to record anything when the transition is rejected', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder({ status: 'cancelled' }));
+
+      await expect(service.confirm(ORDER_ID, staff as never)).rejects.toThrow(
+        /cancelled/,
+      );
+
+      expect(statusEventTxRepo.save).not.toHaveBeenCalled();
+    });
+
+    it('reads the history oldest first, scoped like the order itself', async () => {
+      orderRepo.findOne.mockResolvedValue(makeOrder());
+      statusEventRepo.find.mockResolvedValue([]);
+
+      await service.listStatusEvents(ORDER_ID, customer);
+
+      expect(statusEventRepo.find).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { orderId: ORDER_ID },
+          order: { occurredAt: 'ASC' },
+        }),
       );
     });
   });

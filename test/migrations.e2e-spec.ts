@@ -73,7 +73,7 @@ const DEAD_INDEXES = [
 const REPAIR_MIGRATION = 'RestoreIdBasedIndexes1787788800000';
 
 /** The latest migration after security audit (Phase 4). */
-const LATEST_MIGRATION = 'AddVehicleCompatibilityIndexes1787961600000';
+const LATEST_MIGRATION = 'AddOrderStatusEvents1788048000000';
 
 describeWithDocker('migration chain', () => {
   jest.setTimeout(240_000);
@@ -126,6 +126,14 @@ describeWithDocker('migration chain', () => {
     return row.name;
   };
 
+  /** Every applied migration by name — lets the unwind stop by name, not count. */
+  const appliedMigrations = async (): Promise<string[]> => {
+    const rows = await dataSource.query<Array<{ name: string }>>(
+      `SELECT name FROM migrations ORDER BY id ASC`,
+    );
+    return rows.map((r) => r.name);
+  };
+
   afterAll(async () => {
     if (dataSource?.isInitialized) await dataSource.destroy();
     if (container) await container.stop();
@@ -173,13 +181,21 @@ describeWithDocker('migration chain', () => {
     const deficit = await indexDefs();
     expect(fresh.length - deficit.length).toBe(RESTORED_INDEXES.length);
 
-    // undoLastMigration is positional. After security audit, we need to undo
-    // back to BEFORE the repair migration, then rerun all.
     await expect(lastAppliedMigration()).resolves.toBe(LATEST_MIGRATION);
-    // Undo Phase 4, Phase 3, then repair migration
-    await dataSource.undoLastMigration(); // Phase 4
-    await dataSource.undoLastMigration(); // Phase 3
-    await dataSource.undoLastMigration(); // Repair
+
+    // `undoLastMigration` is positional, so this used to be three fixed calls —
+    // and every migration added after the repair silently shifted the count,
+    // making a passing test start failing for a reason unrelated to what it
+    // checks. Unwinding by NAME survives that: it undoes until the repair
+    // migration is gone, however many were stacked on top.
+    const REPAIR = 'RestoreIdBasedIndexes1787788800000';
+    for (let i = 0; i < 20; i++) {
+      const applied = await appliedMigrations();
+      if (!applied.includes(REPAIR)) break;
+      await dataSource.undoLastMigration();
+    }
+    await expect(appliedMigrations()).resolves.not.toContain(REPAIR);
+
     await dataSource.runMigrations();
 
     // DEFINITIONS. This is the assertion that makes the two levers provably
