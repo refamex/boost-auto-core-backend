@@ -5,6 +5,7 @@ import { InventoryModule } from '../inventory/inventory.module';
 import { ProductEntity } from '../pim/domain/entities/product.entity';
 import { OrderService } from './application/services/order.service';
 import { OrderItemEntity } from './domain/entities/order-item.entity';
+import { OrderStatusEventEntity } from './domain/entities/order-status-event.entity';
 import { OrderPaymentEntity } from './domain/entities/order-payment.entity';
 import { OrderEntity } from './domain/entities/order.entity';
 import { OrderController } from './infrastructure/http/order.controller';
@@ -15,6 +16,7 @@ import { OrderController } from './infrastructure/http/order.controller';
       OrderEntity,
       OrderItemEntity,
       OrderPaymentEntity,
+      OrderStatusEventEntity,
       ProductEntity,
     ]),
     InventoryModule,

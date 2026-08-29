@@ -35,6 +35,21 @@ export class OrderController {
     return this.svc.findById(id, user);
   }
 
+  /**
+   * Quién movió esta orden y cuándo.
+   *
+   * Sin `@Roles`: el scope de propiedad va en el servicio, igual que en
+   * `findById`. El historial de una orden no puede ser más visible que la
+   * orden misma.
+   */
+  @Get(':id/status-events')
+  statusEvents(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.svc.listStatusEvents(id, user);
+  }
+
   @Post()
   @Roles('orders:create', 'orders:write')
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: AuthenticatedUser) {
@@ -49,20 +64,20 @@ export class OrderController {
 
   @Post(':id/confirm')
   @Roles('orders:write')
-  confirm(@Param('id') id: string) {
-    return this.svc.confirm(id);
+  confirm(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.svc.confirm(id, user);
   }
 
   @Post(':id/prepare')
   @Roles('orders:write')
-  prepare(@Param('id') id: string) {
-    return this.svc.prepare(id);
+  prepare(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.svc.prepare(id, user);
   }
 
   @Post(':id/cancel')
   @Roles('orders:write')
-  cancel(@Param('id') id: string) {
-    return this.svc.cancel(id);
+  cancel(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.svc.cancel(id, user);
   }
 
   @Post(':id/payments')
