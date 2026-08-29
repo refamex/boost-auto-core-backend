@@ -24,6 +24,8 @@ import {
   ProductDimensionService,
   ProductImageService,
 } from './application/services/product-children.service';
+import { InventoryEntity } from '../inventory/domain/entities/inventory.entity';
+import { ProductAvailabilityService } from './application/services/product-availability.service';
 import { ProductService } from './application/services/product.service';
 import { VolumeCategoryService } from './application/services/volume-category.service';
 import { AutoPartController } from './infrastructure/http/auto-part.controller';
@@ -38,6 +40,9 @@ import { VolumeCategoryController } from './infrastructure/http/volume-category.
 @Module({
   imports: [
     TypeOrmModule.forFeature([
+      // Solo lectura, y agregada: el catálogo publica si hay stock, nunca
+      // cuánto. Ver ProductAvailabilityService.
+      InventoryEntity,
       CategoryDepartmentEntity,
       CategoryEntity,
       BrandEntity,
@@ -61,6 +66,7 @@ import { VolumeCategoryController } from './infrastructure/http/volume-category.
     VolumeCategoryService,
     AutoPartService,
     ProductService,
+    ProductAvailabilityService,
     ProductColorService,
     ProductImageService,
     ProductDimensionService,

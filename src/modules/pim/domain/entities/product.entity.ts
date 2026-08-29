@@ -102,6 +102,17 @@ export class ProductEntity {
   @Column({ type: 'double precision', nullable: true })
   price?: number | null;
 
+  /**
+   * Disponibilidad, poblada por `ProductAvailabilityService`. NO son columnas:
+   * el stock vive en `inventory.inventory` y se agrega al leer.
+   *
+   * Booleanos, nunca una cantidad. El comprador necesita saber si puede
+   * comprar; cuánto hay es información interna, y publicarla entregaría el
+   * inventario de la empresa a cualquiera que lea la API.
+   */
+  inStock?: boolean;
+  lowStock?: boolean;
+
   @CreateDateColumn({ type: 'timestamptz', name: 'created_at' })
   createdAt!: Date;
 

@@ -55,6 +55,15 @@ export interface NotificationsConfig {
   mailFrom: string;
 }
 
+export interface InventoryConfig {
+  /**
+   * Debajo de este número (inclusive) un producto se marca `lowStock` en el
+   * catálogo. Es un umbral de presentación, no una regla de negocio: nunca
+   * bloquea una venta, solo habilita el aviso de «últimas unidades».
+   */
+  lowStockThreshold: number;
+}
+
 export interface TaxConfig {
   /**
    * Fraction, not percent: 0.16 is 16%. Applied server-side to every order and
@@ -91,6 +100,7 @@ export interface AppConfig {
   tax: TaxConfig;
   polar: PolarConfig;
   skydropx: SkydropxConfig;
+  inventory: InventoryConfig;
   roughCountry: RoughCountryConfig;
   notifications: NotificationsConfig;
 }
@@ -122,6 +132,12 @@ export default (): AppConfig => ({
   },
   tax: {
     rate: Number.parseFloat(process.env.TAX_RATE ?? '0.16'),
+  },
+  inventory: {
+    lowStockThreshold: Number.parseInt(
+      process.env.LOW_STOCK_THRESHOLD ?? '5',
+      10,
+    ),
   },
   polar: {
     enabled: process.env.POLAR_ENABLED === 'true',
