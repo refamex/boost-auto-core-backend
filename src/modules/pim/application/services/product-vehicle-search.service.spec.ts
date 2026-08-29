@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { SelectQueryBuilder } from 'typeorm';
 import { ProductEntity } from '../../domain/entities/product.entity';
+import { ProductAvailabilityService } from './product-availability.service';
 import { ProductService } from './product.service';
 import { VehicleProductQueryDto } from '../../infrastructure/http/dto/product.dto';
 
@@ -33,6 +34,13 @@ describe('ProductService — Vehicle Search (Phase 4)', () => {
         {
           provide: getRepositoryToken(ProductEntity),
           useValue: mockRepo,
+        },
+        {
+          // Este spec verifica la CONSULTA de búsqueda vehicular, no la
+          // disponibilidad — que tiene su propio spec. Un doble que devuelve
+          // los productos intactos mantiene el foco acá.
+          provide: ProductAvailabilityService,
+          useValue: { decorate: jest.fn(async (rows: unknown) => rows) },
         },
       ],
     }).compile();

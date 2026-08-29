@@ -5,6 +5,7 @@ import {
   PaginatedResult,
   paginated,
 } from '../../../../shared/common/pagination/pagination.dto';
+import { ProductAvailabilityService } from './product-availability.service';
 import { ProductEntity } from '../../domain/entities/product.entity';
 import {
   CreateProductDto,
@@ -18,6 +19,7 @@ export class ProductService {
   constructor(
     @InjectRepository(ProductEntity)
     private readonly repo: Repository<ProductEntity>,
+    private readonly availability: ProductAvailabilityService,
   ) {}
 
   async search(
@@ -52,7 +54,7 @@ export class ProductService {
 
     qb.skip(query.skip).take(query.limit);
     const [items, total] = await qb.getManyAndCount();
-    return paginated(items, total, query);
+    return paginated(await this.availability.decorate(items), total, query);
   }
 
   async findById(id: number): Promise<ProductEntity> {
@@ -61,7 +63,8 @@ export class ProductService {
       relations: ['brand', 'category', 'autoPartType', 'provider'],
     });
     if (!found) throw new NotFoundException(`Product ${id} not found`);
-    return found;
+    const [decorated] = await this.availability.decorate([found]);
+    return decorated;
   }
 
   async findBySku(sku: string): Promise<ProductEntity> {
@@ -70,7 +73,8 @@ export class ProductService {
       relations: ['brand', 'category', 'autoPartType', 'provider'],
     });
     if (!found) throw new NotFoundException(`Product sku=${sku} not found`);
-    return found;
+    const [decorated] = await this.availability.decorate([found]);
+    return decorated;
   }
 
   async findProductsByVehicle(
@@ -112,7 +116,7 @@ export class ProductService {
 
     qb.skip(query.skip).take(query.limit);
     const [items, total] = await qb.getManyAndCount();
-    return paginated(items, total, query);
+    return paginated(await this.availability.decorate(items), total, query);
   }
 
   create(dto: CreateProductDto): Promise<ProductEntity> {

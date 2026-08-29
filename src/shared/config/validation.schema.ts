@@ -39,6 +39,9 @@ export const validationSchema = Joi.object({
   // Order and quote tax is computed server-side from this rate; the request
   // body no longer supplies a tax amount. A fraction, not a percent.
   TAX_RATE: Joi.number().min(0).max(1).default(0.16),
+  // Umbral de presentación para el aviso de «últimas unidades» en el catálogo.
+  // No bloquea ninguna venta.
+  LOW_STOCK_THRESHOLD: Joi.number().integer().min(1).default(5),
 
   POLAR_ENABLED: Joi.boolean().default(false),
   POLAR_ACCESS_TOKEN: Joi.string().when('POLAR_ENABLED', {
