@@ -40,7 +40,12 @@ describe('ProductService — Vehicle Search (Phase 4)', () => {
           // disponibilidad — que tiene su propio spec. Un doble que devuelve
           // los productos intactos mantiene el foco acá.
           provide: ProductAvailabilityService,
-          useValue: { decorate: jest.fn(async (rows: unknown) => rows) },
+          // `Promise.resolve` y no `async`: la regla `require-await` rechaza una
+          // función asíncrona que nunca espera nada, y el doble solo necesita
+          // devolver una promesa.
+          useValue: {
+            decorate: jest.fn((rows: unknown) => Promise.resolve(rows)),
+          },
         },
       ],
     }).compile();
