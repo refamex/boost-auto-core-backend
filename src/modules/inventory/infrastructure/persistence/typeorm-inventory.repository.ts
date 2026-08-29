@@ -154,10 +154,20 @@ export class TypeOrmInventoryRepository implements InventoryRepository {
     mutate: (inv: Inventory) => T,
   ): Promise<{ inventory: Inventory; result: T }> {
     return this.dataSource.transaction(async (tx) => {
+      // INNER, no LEFT. Postgres rechaza `FOR UPDATE` sobre el lado nullable de
+      // un outer join, así que con `leftJoinAndSelect` esta consulta fallaba
+      // SIEMPRE — y con ella toda reserva, liberación y ajuste que pasara por
+      // el agregado. Lo tapaba que las pruebas unitarias mockean el
+      // repositorio y que el único e2e de inventario usa `bulkUpsertStock`,
+      // que es justamente el camino que NO pasa por acá.
+      //
+      // `inventory.product_id` es NOT NULL con FK a `pim.product`, así que el
+      // producto siempre existe: el outer join no aportaba nada que el inner
+      // no dé, y sí impedía tomar el lock.
       const row = await tx
         .getRepository(InventoryEntity)
         .createQueryBuilder('i')
-        .leftJoinAndSelect('i.product', 'product')
+        .innerJoinAndSelect('i.product', 'product')
         .setLock('pessimistic_write')
         .where('i.id = :id', { id })
         .getOne();
