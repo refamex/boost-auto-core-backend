@@ -175,3 +175,42 @@ export class OrderQueryDto {
   @IsOptional()
   status?: string;
 }
+
+export class PreviewOrderItemDto {
+  @ApiProperty()
+  @IsInt()
+  @Type(() => Number)
+  productId!: number;
+
+  @ApiProperty()
+  @IsNumber()
+  @Min(0.01)
+  @Type(() => Number)
+  qty!: number;
+}
+
+/**
+ * A cart to price, not an order to create.
+ *
+ * Deliberately without `unitPrice`: this endpoint answers what will be charged,
+ * so there is nothing for the caller to assert. `CreateOrderItemDto.unitPrice`
+ * stays what it is — an assertion verified with a 409 — and the two must not be
+ * confused.
+ */
+export class PreviewOrderDto {
+  @ApiProperty()
+  @IsUUID()
+  customerId!: string;
+
+  /** Same semantics as `CreateOrderDto.priceListCode`, so both price alike. */
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  priceListCode?: string;
+
+  @ApiProperty({ type: [PreviewOrderItemDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PreviewOrderItemDto)
+  items!: PreviewOrderItemDto[];
+}

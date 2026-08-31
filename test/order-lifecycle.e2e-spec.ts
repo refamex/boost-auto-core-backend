@@ -259,6 +259,166 @@ describeWithDocker('order lifecycle (e2e)', () => {
     expect(trail[1].actorId).toBe(STAFF);
   });
 
+  /**
+   * The landmine, and its defusal.
+   *
+   * A client that resolves prices on its own agrees with the server only by
+   * luck. Today the luck holds because no migration seeds a default price list,
+   * so `findApplicableOrNull` returns null and everything falls back to
+   * `pim.product.price`. Creating one default list — which the API allows —
+   * silently breaks every checkout that asserts a catalogue price.
+   *
+   * These tests seed exactly that list, so the failure is reproduced first and
+   * the preview is shown to be the way out.
+   */
+  describe('price preview', () => {
+    const LIST_PRICE = 1200;
+    const BULK_PRICE = 900;
+    const BULK_MIN_QTY = 5;
+
+    let priceListId: string;
+    let unpriceableProductId: number;
+
+    const preview = (
+      headers: Record<string, string>,
+      body: Record<string, unknown> = {},
+    ) =>
+      request(app.getHttpServer())
+        .post('/v1/orders/price-preview')
+        .set(headers)
+        .send({
+          customerId: CUSTOMER,
+          items: [{ productId, qty: 1 }],
+          ...body,
+        });
+
+    beforeAll(async () => {
+      const [product] = await dataSource.query<Array<{ id: number }>>(
+        `INSERT INTO pim.product (sku, name, price)
+         VALUES ('NO-PRICE-SKU', 'Producto sin precio', NULL) RETURNING id`,
+      );
+      unpriceableProductId = Number(product.id);
+      expect(unpriceableProductId).toEqual(expect.any(Number));
+    });
+
+    // Seeded per test and torn down after, so the rest of the suite keeps
+    // pricing off the catalogue — that is the state production is in today.
+    beforeEach(async () => {
+      const [list] = await dataSource.query<Array<{ id: string }>>(
+        `INSERT INTO commerce.price_lists (code, name, is_default)
+         VALUES ('MAYOREO', 'Mayoreo', TRUE) RETURNING id`,
+      );
+      priceListId = list.id;
+
+      await dataSource.query(
+        `INSERT INTO commerce.price_list_items (price_list_id, product_id, price, min_qty)
+         VALUES ($1, $2, $3, 1), ($1, $2, $4, $5)`,
+        [priceListId, productId, LIST_PRICE, BULK_PRICE, BULK_MIN_QTY],
+      );
+    });
+
+    afterEach(async () => {
+      await dataSource.query('DELETE FROM commerce.price_list_items');
+      await dataSource.query('DELETE FROM commerce.price_lists');
+    });
+
+    it('rejects a cart priced off the catalogue once a default list exists', async () => {
+      // Exactly what the POS sends today: the catalogue price it displayed.
+      const res = await createOrder(buyer(), {
+        items: [{ productId, qty: 1, unitPrice: CATALOGUE_PRICE }],
+      });
+
+      expect(res.status).toBe(409);
+    });
+
+    it('quotes the list price and that quote creates the order', async () => {
+      const quoted = await preview(buyer(), {
+        items: [{ productId, qty: 2 }],
+      }).expect(200);
+
+      const body = quoted.body as {
+        items: Array<{ productId: number; unitPrice: number; source: string }>;
+        subtotal: number;
+        grandTotal: number;
+      };
+
+      expect(body.items[0].source).toBe('price-list');
+      expect(Number(body.items[0].unitPrice)).toBe(LIST_PRICE);
+      expect(Number(body.subtotal)).toBe(LIST_PRICE * 2);
+
+      // The whole point: what the preview quoted is what `create` accepts and
+      // what the order ends up costing. No 409, and no second arithmetic.
+      const created = await createOrder(buyer(), {
+        items: [{ productId, qty: 2, unitPrice: body.items[0].unitPrice }],
+      }).expect(201);
+
+      const order = created.body as { subtotal: number; grandTotal: number };
+      expect(Number(order.grandTotal)).toBe(Number(body.grandTotal));
+      expect(Number(order.subtotal)).toBe(Number(body.subtotal));
+    });
+
+    /**
+     * The tier the old client-side resolution ignored outright: it filtered on
+     * validity only, so a wholesale break never applied and the cart showed
+     * more than the server would charge.
+     */
+    it('applies the quantity tier the client-side resolution used to ignore', async () => {
+      const below = await preview(buyer(), {
+        items: [{ productId, qty: BULK_MIN_QTY - 1 }],
+      }).expect(200);
+      const atTier = await preview(buyer(), {
+        items: [{ productId, qty: BULK_MIN_QTY }],
+      }).expect(200);
+
+      const priceOf = (res: { body: unknown }) =>
+        Number(
+          (res.body as { items: Array<{ unitPrice: number }> }).items[0]
+            .unitPrice,
+        );
+
+      expect(priceOf(below)).toBe(LIST_PRICE);
+      expect(priceOf(atTier)).toBe(BULK_PRICE);
+    });
+
+    /**
+     * `create` answers 422 for an unpriceable line, which is right for creating
+     * an order and useless for a cashier: it names no line. The preview reports
+     * per line so the UI can point at the row to remove.
+     */
+    it('reports an unpriceable line instead of failing the whole cart', async () => {
+      const res = await preview(buyer(), {
+        items: [
+          { productId, qty: 1 },
+          { productId: unpriceableProductId, qty: 1 },
+        ],
+      }).expect(200);
+
+      const body = res.body as {
+        items: Array<{ productId: number; unitPrice: number; source: string }>;
+        subtotal: number;
+      };
+
+      expect(body.items).toHaveLength(2);
+      expect(body.items[1].source).toBe('unavailable');
+      // Zero, and excluded from the total — an unpriceable line must never
+      // read as a free one.
+      expect(Number(body.items[1].unitPrice)).toBe(0);
+      expect(Number(body.subtotal)).toBe(LIST_PRICE);
+    });
+
+    it('does not let a shopper price another shopper cart', async () => {
+      await preview(buyer(OTHER_CUSTOMER)).expect(403);
+    });
+
+    it('refuses an asserted price, since a preview is not an order', async () => {
+      // `forbidNonWhitelisted` is what keeps the two DTOs from blurring: the
+      // preview says what it will charge, it does not verify a claim.
+      await preview(buyer(), {
+        items: [{ productId, qty: 1, unitPrice: 0.01 }],
+      }).expect(400);
+    });
+  });
+
   describe('the paths that must fail', () => {
     it('does not let a shopper see another shopper orders', async () => {
       await createOrder(buyer()).expect(201);

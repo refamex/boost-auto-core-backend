@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
@@ -16,6 +18,7 @@ import {
   CreateOrderDto,
   CreateOrderPaymentDto,
   OrderQueryDto,
+  PreviewOrderDto,
   UpdateOrderDto,
 } from './dto/order.dto';
 
@@ -54,6 +57,22 @@ export class OrderController {
   @Roles('orders:create', 'orders:write')
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.svc.create(dto, user);
+  }
+
+  /**
+   * Qué se cobraría por este carrito, sin crear nada.
+   *
+   * Mismo `@Roles` que `create` a propósito: quien puede crear la orden puede
+   * ver su precio, y nadie más. `200` y no `201` porque no nace ningún recurso.
+   */
+  @Post('price-preview')
+  @HttpCode(HttpStatus.OK)
+  @Roles('orders:create', 'orders:write')
+  preview(
+    @Body() dto: PreviewOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.svc.preview(dto, user);
   }
 
   @Patch(':id')

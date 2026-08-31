@@ -44,6 +44,7 @@ import {
   CreateOrderDto,
   CreateOrderPaymentDto,
   OrderQueryDto,
+  PreviewOrderDto,
   UpdateOrderDto,
 } from '../../infrastructure/http/dto/order.dto';
 
@@ -63,6 +64,36 @@ interface PricedOrder {
   subtotal: number;
   taxTotal: number;
   items: Partial<OrderItemEntity>[];
+}
+
+/** Where a resolved price came from. `unavailable` only ever reaches a preview. */
+export type PriceSource = 'price-list' | 'catalogue' | 'unavailable';
+
+interface ResolvedUnitPrice {
+  unitPrice: number;
+  source: Exclude<PriceSource, 'unavailable'>;
+}
+
+/**
+ * All `priceLines` ever reads off an order. Narrower than `CreateOrderDto` so
+ * the preview can reuse the pricing path without inventing a shipping address
+ * and a customer id it does not have.
+ */
+interface PriceableOrder {
+  priceListCode?: string;
+  items: { productId: number; qty: number; unitPrice?: number; tax?: number }[];
+}
+
+export interface PreviewedOrder {
+  items: {
+    productId: number;
+    qty: number;
+    unitPrice: number;
+    source: PriceSource;
+  }[];
+  subtotal: number;
+  taxTotal: number;
+  grandTotal: number;
 }
 
 @Injectable()
@@ -148,6 +179,91 @@ export class OrderService {
       );
     }
     return this.persist(dto, bound, 'server', actor.email, actor);
+  }
+
+  /**
+   * Prices a cart without creating anything.
+   *
+   * Exists so a caller can *display* the price it is about to be charged
+   * instead of guessing it. A client that resolves prices on its own has to
+   * reimplement the price list cascade, and the moment the two drift apart
+   * `priceLines` rejects the order with a 409 the user cannot act on.
+   *
+   * Same ownership rule as `create` — `bindCreate`, not a new one — so a
+   * customer cannot price another customer's cart. Read-only: no transaction,
+   * no stock, nothing persisted.
+   */
+  async preview(
+    dto: PreviewOrderDto,
+    actor: AuthenticatedUser,
+  ): Promise<PreviewedOrder> {
+    if (!actor) {
+      throw new ForbiddenException(
+        'order preview requires an authenticated caller',
+      );
+    }
+    if (!bindCreate(actor, dto)) {
+      throw new ForbiddenException(
+        'customerId must match the authenticated customer',
+      );
+    }
+
+    const products = await this.loadProducts(dto.items.map((i) => i.productId));
+    const priceList = await this.priceLists.findApplicableOrNull(
+      dto.priceListCode,
+    );
+    // One instant for the whole cart, as in `priceLines`: two lines must never
+    // straddle a price list's validity boundary.
+    const asOf = new Date();
+    const taxRate = this.config.get('tax.rate', { infer: true });
+
+    let subtotal = 0;
+    let taxTotal = 0;
+    const items: PreviewedOrder['items'] = [];
+
+    for (const line of dto.items) {
+      const product = products.get(line.productId)!;
+      const resolved = await this.tryResolveUnitPrice(
+        priceList,
+        product,
+        line.qty,
+        asOf,
+      );
+
+      // An unpriceable line is reported, not thrown: `create` still rejects it
+      // with a 422, but a preview that dies on one bad line cannot tell the
+      // caller which line to remove.
+      if (!resolved) {
+        items.push({
+          productId: line.productId,
+          qty: line.qty,
+          unitPrice: 0,
+          source: 'unavailable',
+        });
+        continue;
+      }
+
+      const { net, tax } = priceLine({
+        qty: line.qty,
+        unitPrice: resolved.unitPrice,
+        taxRate,
+      });
+      subtotal = round2(subtotal + net);
+      taxTotal = round2(taxTotal + tax);
+      items.push({
+        productId: line.productId,
+        qty: line.qty,
+        unitPrice: resolved.unitPrice,
+        source: resolved.source,
+      });
+    }
+
+    return {
+      items,
+      subtotal,
+      taxTotal,
+      grandTotal: round2(subtotal + taxTotal),
+    };
   }
 
   /**
@@ -455,7 +571,7 @@ export class OrderService {
    * charges verbatim.
    */
   private async priceLines(
-    dto: CreateOrderDto,
+    dto: PriceableOrder,
     products: Map<number, ProductEntity>,
   ): Promise<PricedOrder> {
     // One list per order, not per line, so a misconfigured catalogue reports
@@ -524,15 +640,19 @@ export class OrderService {
   /**
    * The price list wins where it covers the product; `pim.product.price` is the
    * fallback, because the storefront catalogue is priced there today and not
-   * every SKU has a list entry. A product priced by neither is a 422 — never a
-   * zero, which would be a free order.
+   * every SKU has a list entry. `null` means neither could price it.
+   *
+   * Split out of `resolveUnitPrice` so the preview can report *which* line is
+   * unpriceable instead of failing the whole cart: creating an order with an
+   * unpriceable line is an error, but a cashier still has to see which of the
+   * items in front of them is the problem.
    */
-  private async resolveUnitPrice(
+  private async tryResolveUnitPrice(
     priceList: PriceListEntity | null,
     product: ProductEntity,
     qty: number,
     asOf: Date,
-  ): Promise<number> {
+  ): Promise<ResolvedUnitPrice | null> {
     if (priceList) {
       const priced = await this.priceListItems.tryResolveApplicablePrice(
         priceList.id,
@@ -540,13 +660,34 @@ export class OrderService {
         qty,
         asOf,
       );
-      if (priced) return priced.price;
+      if (priced) return { unitPrice: priced.price, source: 'price-list' };
     }
 
     const catalogue = product.price;
     if (typeof catalogue === 'number' && Number.isFinite(catalogue)) {
-      return catalogue;
+      return { unitPrice: catalogue, source: 'catalogue' };
     }
+
+    return null;
+  }
+
+  /**
+   * Same resolution, but a product priced by neither is a 422 — never a zero,
+   * which would be a free order.
+   */
+  private async resolveUnitPrice(
+    priceList: PriceListEntity | null,
+    product: ProductEntity,
+    qty: number,
+    asOf: Date,
+  ): Promise<number> {
+    const resolved = await this.tryResolveUnitPrice(
+      priceList,
+      product,
+      qty,
+      asOf,
+    );
+    if (resolved) return resolved.unitPrice;
 
     throw new UnprocessableEntityException(
       `product ${product.id} (${product.sku}) has no price` +
