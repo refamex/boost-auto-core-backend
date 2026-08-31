@@ -32,14 +32,14 @@ export class AddCustomerPriceListCode1788134400000 implements MigrationInterface
       ADD COLUMN IF NOT EXISTS price_list_code VARCHAR(50) NULL
     `);
 
-    // Check if constraint already exists before creating it
-    const constraintExists = await queryRunner.query(`
+    // QueryRunner.query returns `any`; the cast satisfies no-unsafe-*.
+    const constraintExists = (await queryRunner.query(`
       SELECT 1 FROM pg_constraint
       WHERE conname = 'fk_customer_profile_price_list_code'
       AND connamespace = 'customers'::regnamespace
-    `);
+    `)) as unknown[];
 
-    if (!constraintExists || constraintExists.length === 0) {
+    if (constraintExists.length === 0) {
       await queryRunner.query(`
         ALTER TABLE customers.customer_profile
         ADD CONSTRAINT fk_customer_profile_price_list_code
