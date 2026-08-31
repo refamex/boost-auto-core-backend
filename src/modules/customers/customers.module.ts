@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CommerceModule } from '../commerce/commerce.module';
 import { CustomerBranchService } from './application/services/customer-branch.service';
 import { CustomerProfileService } from './application/services/customer-profile.service';
 import { CustomerBranchEntity } from './domain/entities/customer-branch.entity';
@@ -9,6 +10,7 @@ import { CustomerController } from './infrastructure/http/customer.controller';
 @Module({
   imports: [
     TypeOrmModule.forFeature([CustomerProfileEntity, CustomerBranchEntity]),
+    CommerceModule,
   ],
   providers: [CustomerProfileService, CustomerBranchService],
   controllers: [CustomerController],

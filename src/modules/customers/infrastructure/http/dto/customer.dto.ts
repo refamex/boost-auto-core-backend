@@ -58,6 +58,18 @@ export class CreateCustomerDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  /**
+   * Code of an existing `commerce.price_lists` row. Absent or null means the
+   * customer has no negotiated list and prices off the default one.
+   *
+   * Assigning a code that does not exist is rejected at write time rather
+   * than discovered on the customer's next order.
+   */
+  @ApiPropertyOptional({ nullable: true })
+  @IsString()
+  @IsOptional()
+  priceListCode?: string | null;
 }
 
 /**

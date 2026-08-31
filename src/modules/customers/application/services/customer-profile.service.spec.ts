@@ -7,6 +7,7 @@ import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { QueryFailedError } from 'typeorm';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { PriceListService } from '../../../commerce/application/services/price-list.service';
 import { CustomerProfileEntity } from '../../domain/entities/customer-profile.entity';
 import { CustomerProfileService } from './customer-profile.service';
 
@@ -67,17 +68,23 @@ describe('CustomerProfileService', () => {
     update: jest.fn(),
   };
 
+  const priceListService = {
+    findApplicableOrNull: jest.fn(),
+  };
+
   let service: CustomerProfileService;
 
   beforeEach(async () => {
     jest.clearAllMocks();
     repo.save.mockImplementation((x: unknown) => Promise.resolve(x));
     repo.create.mockImplementation((x: unknown) => x);
+    priceListService.findApplicableOrNull.mockResolvedValue({});
 
     const moduleRef = await Test.createTestingModule({
       providers: [
         CustomerProfileService,
         { provide: getRepositoryToken(CustomerProfileEntity), useValue: repo },
+        { provide: PriceListService, useValue: priceListService },
       ],
     }).compile();
     service = moduleRef.get(CustomerProfileService);
