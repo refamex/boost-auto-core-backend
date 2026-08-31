@@ -44,6 +44,13 @@ export interface RoughCountryConfig {
   branchTnId?: number;
   /** IANA zone the cron schedule is expressed in. */
   timeZone: string;
+  /**
+   * How many times to ask the supplier for the feed before giving up, the
+   * first attempt included. Only transport failures are retried.
+   */
+  retryAttempts: number;
+  /** First backoff wait; each further attempt doubles it. */
+  retryBaseDelayMs: number;
 }
 
 export interface NotificationsConfig {
@@ -178,6 +185,11 @@ export default (): AppConfig => ({
     branchNvId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_NV_ID),
     branchTnId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_TN_ID),
     timeZone: process.env.ROUGH_COUNTRY_SYNC_TZ ?? 'America/Mexico_City',
+    retryAttempts: parseInt(process.env.ROUGH_COUNTRY_RETRY_ATTEMPTS ?? '3', 10),
+    retryBaseDelayMs: parseInt(
+      process.env.ROUGH_COUNTRY_RETRY_BASE_DELAY_MS ?? '1000',
+      10,
+    ),
   },
   notifications: {
     emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',

@@ -125,6 +125,14 @@ export const validationSchema = Joi.object({
     .positive()
     .when('ROUGH_COUNTRY_SYNC_ENABLED', { is: true, then: Joi.required() }),
   ROUGH_COUNTRY_SYNC_TZ: Joi.string().default('America/Mexico_City'),
+  // UC-06 FA-1 asks for up to 3 attempts. Capped at 5 because each attempt
+  // re-downloads a ~16 MB workbook, and the next scheduled run is a better
+  // answer than hammering a supplier that is plainly down.
+  ROUGH_COUNTRY_RETRY_ATTEMPTS: Joi.number().integer().min(1).max(5).default(3),
+  ROUGH_COUNTRY_RETRY_BASE_DELAY_MS: Joi.number()
+    .integer()
+    .min(0)
+    .default(1000),
 
   NOTIFICATIONS_EMAIL_ENABLED: Joi.boolean().default(false),
 
