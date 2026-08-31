@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CommerceModule } from '../commerce/commerce.module';
+import { CustomersModule } from '../customers/customers.module';
 import { InventoryModule } from '../inventory/inventory.module';
 import { ProductEntity } from '../pim/domain/entities/product.entity';
 import { OrderService } from './application/services/order.service';
@@ -20,9 +21,8 @@ import { OrderController } from './infrastructure/http/order.controller';
       ProductEntity,
     ]),
     InventoryModule,
-    // Order pricing resolves through the same price list services `quotes`
-    // uses. `commerce` imports nothing from `orders`, so there is no cycle.
     CommerceModule,
+    CustomersModule,
   ],
   providers: [OrderService],
   controllers: [OrderController],

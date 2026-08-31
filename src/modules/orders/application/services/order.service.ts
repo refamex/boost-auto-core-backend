@@ -16,7 +16,9 @@ import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface
 import { AppConfig } from '../../../../shared/config/configuration';
 import { PriceListItemService } from '../../../commerce/application/services/price-list-item.service';
 import { PriceListService } from '../../../commerce/application/services/price-list.service';
+import { documentPriceListCode } from '../../../commerce/domain/document-price-list-code';
 import { PriceListEntity } from '../../../commerce/domain/entities/price-list.entity';
+import { CustomerProfileService } from '../../../customers/application/services/customer-profile.service';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
@@ -39,6 +41,7 @@ import {
   bindCreate,
   buildWhere,
   OrderCreateBinding,
+  tierOf,
 } from '../../domain/order-visibility';
 import {
   CreateOrderDto,
@@ -80,6 +83,7 @@ interface ResolvedUnitPrice {
  * and a customer id it does not have.
  */
 interface PriceableOrder {
+  customerId: string;
   priceListCode?: string;
   items: { productId: number; qty: number; unitPrice?: number; tax?: number }[];
 }
@@ -120,6 +124,7 @@ export class OrderService {
     private readonly config: ConfigService<AppConfig, true>,
     @InjectRepository(OrderStatusEventEntity)
     private readonly statusEvents: Repository<OrderStatusEventEntity>,
+    private readonly profiles: CustomerProfileService,
   ) {}
 
   /**
@@ -209,7 +214,9 @@ export class OrderService {
     }
 
     const products = await this.loadProducts(dto.items.map((i) => i.productId));
-    const priceList = await this.priceLists.findApplicableOrNull(
+    const priceList = await this.applicableList(
+      dto.customerId,
+      tierOf(actor) !== 'customer',
       dto.priceListCode,
     );
     // One instant for the whole cart, as in `priceLines`: two lines must never
@@ -295,7 +302,7 @@ export class OrderService {
     const products = await this.loadProducts(dto.items.map((i) => i.productId));
     const { subtotal, taxTotal, items } =
       pricing === 'server'
-        ? await this.priceLines(dto, products)
+        ? await this.priceLines(dto, products, actor!)
         : this.snapshotLines(dto, products);
 
     const created = await this.dataSource.transaction(async (tx) => {
@@ -562,6 +569,22 @@ export class OrderService {
     return map;
   }
 
+  private async applicableList(
+    documentCustomerId: string,
+    honorBodyCode: boolean,
+    bodyCode?: string,
+  ): Promise<PriceListEntity | null> {
+    const profile =
+      await this.profiles.findByAuthCustomerId(documentCustomerId);
+    return this.priceLists.findApplicableOrNull(
+      documentPriceListCode({
+        honorBodyCode,
+        bodyCode,
+        profileCode: profile?.priceListCode,
+      }),
+    );
+  }
+
   /**
    * Prices an order for an untrusted caller.
    *
@@ -573,10 +596,13 @@ export class OrderService {
   private async priceLines(
     dto: PriceableOrder,
     products: Map<number, ProductEntity>,
+    actor: AuthenticatedUser,
   ): Promise<PricedOrder> {
     // One list per order, not per line, so a misconfigured catalogue reports
     // itself plainly instead of as an unpriceable product (as in QuoteService).
-    const priceList = await this.priceLists.findApplicableOrNull(
+    const priceList = await this.applicableList(
+      dto.customerId,
+      tierOf(actor) !== 'customer',
       dto.priceListCode,
     );
     // A single instant for the whole order: two lines of the same order must

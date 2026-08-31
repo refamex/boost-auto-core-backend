@@ -83,9 +83,8 @@ export class CreateOrderDto {
   status?: string;
 
   /**
-   * Price list to quote against. Omitted means the default list; a code that
-   * does not exist is a 404 rather than a silent fallback. When no list covers
-   * a product, its `pim.product.price` is used.
+   * Staff may name a list. Omitted (and any customer-tier body) resolves from
+   * the document customer's profile, then the default list, then catalogue.
    */
   @ApiPropertyOptional()
   @IsString()
