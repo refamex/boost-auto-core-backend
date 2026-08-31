@@ -540,6 +540,32 @@ describe('OrderService', () => {
         source: 'price-list',
       });
     });
+
+    it('lets staff name a list on preview even when the document customer is assigned another', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
+      });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 70 });
+
+      const result = await service.preview(
+        {
+          customerId: 'customer-1',
+          priceListCode: 'VIP',
+          items: [{ productId: 1, qty: 1 }],
+        },
+        staff,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(result.items[0]).toMatchObject({
+        unitPrice: 70,
+        source: 'price-list',
+      });
+    });
   });
 
   describe('createInternal', () => {
