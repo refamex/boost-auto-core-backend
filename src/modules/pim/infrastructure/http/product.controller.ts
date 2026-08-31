@@ -52,6 +52,20 @@ export class ProductController {
     return this.products.findProductsByVehicle(query);
   }
 
+  /**
+   * Cuántos resultados daría cada opción de filtro, para el mismo criterio.
+   *
+   * Antes de `@Get(':id')` a propósito: registrada después, `ParseIntPipe`
+   * atraparía «facets» como id y respondería 400.
+   *
+   * Sin `@Roles`, igual que `@Get()` — quien puede listar el catálogo puede
+   * saber cómo se reparte.
+   */
+  @Get('facets')
+  facets(@Query() query: ProductQueryDto) {
+    return this.products.facets(query);
+  }
+
   @Get(':id')
   findById(@Param('id', ParseIntPipe) id: number) {
     return this.products.findById(id);

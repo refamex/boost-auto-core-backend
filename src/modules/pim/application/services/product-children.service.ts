@@ -9,6 +9,8 @@ import { ProductColorEntity } from '../../domain/entities/product-color.entity';
 import { ProductDimensionEntity } from '../../domain/entities/product-dimension.entity';
 import { ProductImageEntity } from '../../domain/entities/product-image.entity';
 import { ProductCrossReferenceEntity } from '../../domain/entities/product-cross-reference.entity';
+import { ProductEntity } from '../../domain/entities/product.entity';
+import { ProductAvailabilityService } from './product-availability.service';
 import {
   CreateCrossReferenceDto,
   CreateProductColorDto,
@@ -104,18 +106,37 @@ export class ProductCrossReferenceService {
     @InjectRepository(ProductCrossReferenceEntity)
     private readonly repo: Repository<ProductCrossReferenceEntity>,
     private readonly ds: DataSource,
+    private readonly availability: ProductAvailabilityService,
   ) {}
+  /**
+   * Las referencias cruzadas de un producto.
+   *
+   * `referenceProduct` viaja con su marca y su disponibilidad porque el
+   * storefront las pinta como alternativas comprables: sin la marca la tarjeta
+   * sale con un guion, y sin `inStock` ofrecería comprar algo agotado.
+   *
+   * Una referencia puede ser un SKU externo sin producto nuestro — de ahí que
+   * `referenceProduct` sea nulo y haya que filtrar antes de decorar.
+   */
   async listBySku(sku: string) {
-    return this.repo.find({
+    const rows = await this.repo.find({
       where: { productId: await productId(this.ds, sku) },
       order: { createdAt: 'DESC' },
       relations: {
         productBrandRef: true,
         reference: true,
         referenceBrandRef: true,
-        referenceProduct: true,
+        referenceProduct: { brand: true },
       },
     });
+
+    await this.availability.decorate(
+      rows
+        .map((r) => r.referenceProduct)
+        .filter((p): p is ProductEntity => p != null),
+    );
+
+    return rows;
   }
   async create(sku: string, dto: CreateCrossReferenceDto) {
     if (dto.referenceProductSku === sku)
