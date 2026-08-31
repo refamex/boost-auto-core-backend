@@ -55,6 +55,21 @@ export class CustomerProfileEntity {
   @Column({ type: 'text', nullable: true })
   notes?: string | null;
 
+  /**
+   * The price list this customer's orders and quotes resolve against.
+   *
+   * NULL means "no negotiated list": pricing falls back to the default list,
+   * then to `pim.product.price`. Unlike `authCustomerId` above this is a real
+   * FK — `commerce.price_lists` lives in this database.
+   */
+  @Column({
+    type: 'varchar',
+    length: 50,
+    name: 'price_list_code',
+    nullable: true,
+  })
+  priceListCode?: string | null;
+
   /** The only delete mechanism for a profile — hard delete is out of scope. */
   @Column({ type: 'boolean', name: 'is_active', default: true })
   isActive!: boolean;

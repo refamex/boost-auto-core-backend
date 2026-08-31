@@ -11,6 +11,7 @@ import {
   PaginatedResult,
   paginated,
 } from '../../../../shared/common/pagination/pagination.dto';
+import { PriceListService } from '../../../commerce/application/services/price-list.service';
 import { canLink } from '../../domain/customer-link';
 import { buildWhere } from '../../domain/customer-visibility';
 import { CustomerProfileEntity } from '../../domain/entities/customer-profile.entity';
@@ -26,6 +27,7 @@ export class CustomerProfileService {
   constructor(
     @InjectRepository(CustomerProfileEntity)
     private readonly repo: Repository<CustomerProfileEntity>,
+    private readonly priceLists: PriceListService,
   ) {}
 
   async list(
@@ -79,6 +81,8 @@ export class CustomerProfileService {
       );
     }
 
+    await this.assertPriceListExists(dto.priceListCode);
+
     const profile = this.repo.create({
       ...dto,
       ownerSalesRepId: user.salesRepId ?? null,
@@ -97,7 +101,24 @@ export class CustomerProfileService {
     dto: UpdateCustomerDto,
   ): Promise<CustomerProfileEntity> {
     const existing = await this.loadVisible(id, user);
+    await this.assertPriceListExists(dto.priceListCode);
     return this.repo.save(this.repo.merge(existing, dto));
+  }
+
+  /**
+   * Rejects an unknown price list at assignment time.
+   *
+   * The FK would catch it too, but as a 500 from a constraint name. What
+   * matters more is *when*: a typo caught here is a 404 on the form the admin
+   * is looking at, instead of a customer priced off the default list until
+   * somebody notices the bill is wrong.
+   *
+   * `null` is a real value — it clears the assignment — so only a non-empty
+   * code is checked.
+   */
+  private async assertPriceListExists(code?: string | null): Promise<void> {
+    if (!code) return;
+    await this.priceLists.findApplicableOrNull(code);
   }
 
   /** `@Roles('customers:admin')` on the route is the enforcement point; this
