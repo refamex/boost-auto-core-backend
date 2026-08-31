@@ -24,8 +24,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * `PriceListService.remove` translates it to a 409.
  */
 export class AddCustomerPriceListCode1788134400000
-  implements MigrationInterface
-{
+  implements MigrationInterface {
   name = 'AddCustomerPriceListCode1788134400000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
