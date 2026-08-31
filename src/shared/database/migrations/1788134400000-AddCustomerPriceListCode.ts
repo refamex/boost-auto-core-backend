@@ -32,14 +32,23 @@ export class AddCustomerPriceListCode1788134400000 implements MigrationInterface
       ADD COLUMN IF NOT EXISTS price_list_code VARCHAR(50) NULL
     `);
 
-    await queryRunner.query(`
-      ALTER TABLE customers.customer_profile
-      ADD CONSTRAINT fk_customer_profile_price_list_code
-      FOREIGN KEY (price_list_code)
-      REFERENCES commerce.price_lists (code)
-      ON DELETE RESTRICT
-      ON UPDATE CASCADE
+    // Check if constraint already exists before creating it
+    const constraintExists = await queryRunner.query(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'fk_customer_profile_price_list_code'
+      AND connamespace = 'customers'::regnamespace
     `);
+
+    if (!constraintExists || constraintExists.length === 0) {
+      await queryRunner.query(`
+        ALTER TABLE customers.customer_profile
+        ADD CONSTRAINT fk_customer_profile_price_list_code
+        FOREIGN KEY (price_list_code)
+        REFERENCES commerce.price_lists (code)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+      `);
+    }
 
     // Resolving a customer's list runs on the create/preview path of every
     // order, and RESTRICT makes each price-list delete scan for referencing
