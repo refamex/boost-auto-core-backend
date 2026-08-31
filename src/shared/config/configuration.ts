@@ -185,7 +185,10 @@ export default (): AppConfig => ({
     branchNvId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_NV_ID),
     branchTnId: optionalInt(process.env.ROUGH_COUNTRY_BRANCH_TN_ID),
     timeZone: process.env.ROUGH_COUNTRY_SYNC_TZ ?? 'America/Mexico_City',
-    retryAttempts: parseInt(process.env.ROUGH_COUNTRY_RETRY_ATTEMPTS ?? '3', 10),
+    retryAttempts: parseInt(
+      process.env.ROUGH_COUNTRY_RETRY_ATTEMPTS ?? '3',
+      10,
+    ),
     retryBaseDelayMs: parseInt(
       process.env.ROUGH_COUNTRY_RETRY_BASE_DELAY_MS ?? '1000',
       10,

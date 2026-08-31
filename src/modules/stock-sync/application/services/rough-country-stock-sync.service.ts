@@ -39,7 +39,9 @@ export interface StockSyncRunResult {
 }
 
 const sleep = (ms: number): Promise<void> =>
-  ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve();
+  ms > 0
+    ? new Promise((resolve) => setTimeout(resolve, ms))
+    : Promise.resolve();
 
 const skipped = (reason: 'disabled' | 'locked'): StockSyncRunResult => ({
   status: 'skipped',
@@ -235,9 +237,12 @@ export class RoughCountryStockSyncService {
    * ~16 MB workbook three times to reach the same conclusion.
    */
   private async fetchWithRetry(jobId: string): Promise<FeedStockRow[]> {
-    const { retryAttempts, retryBaseDelayMs } = this.config.get('roughCountry', {
-      infer: true,
-    });
+    const { retryAttempts, retryBaseDelayMs } = this.config.get(
+      'roughCountry',
+      {
+        infer: true,
+      },
+    );
 
     for (let attempt = 1; ; attempt += 1) {
       try {

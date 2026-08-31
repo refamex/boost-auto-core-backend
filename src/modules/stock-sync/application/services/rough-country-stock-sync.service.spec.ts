@@ -241,7 +241,9 @@ describe('RoughCountryStockSyncService', () => {
 
   describe('UC-06 FA-1: retrying an unreachable supplier', () => {
     const unreachable = () =>
-      new ServiceUnavailableException('Rough Country stock feed is unreachable');
+      new ServiceUnavailableException(
+        'Rough Country stock feed is unreachable',
+      );
 
     it('retries the fetch and completes the run when a later attempt succeeds', async () => {
       feedClient.fetchStockRows
@@ -279,7 +281,9 @@ describe('RoughCountryStockSyncService', () => {
         ([, dto]) => dto.payloadJson?.attempt !== undefined,
       );
       expect(retries).toHaveLength(2);
-      expect(retries.map(([, dto]) => dto.payloadJson?.attempt)).toEqual([1, 2]);
+      expect(retries.map(([, dto]) => dto.payloadJson?.attempt)).toEqual([
+        1, 2,
+      ]);
     });
 
     it('doubles the wait between attempts', async () => {
@@ -309,7 +313,9 @@ describe('RoughCountryStockSyncService', () => {
       feedClient.fetchStockRows.mockResolvedValue([
         { sku: 'GHOST', nvStock: 1, tnStock: 1 },
       ]);
-      inventoryRepo.findExistingProductSkus.mockResolvedValue(new Set<string>());
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(
+        new Set<string>(),
+      );
 
       const result = await service.run();
 
