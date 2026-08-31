@@ -23,8 +23,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * the delete until they are reassigned is the honest failure;
  * `PriceListService.remove` translates it to a 409.
  */
-export class AddCustomerPriceListCode1788134400000
-  implements MigrationInterface {
+export class AddCustomerPriceListCode1788134400000 implements MigrationInterface {
   name = 'AddCustomerPriceListCode1788134400000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
