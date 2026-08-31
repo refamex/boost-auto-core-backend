@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   BulkStockRow,
@@ -7,7 +12,11 @@ import {
 } from '../../../inventory/application/ports/inventory.repository';
 import { ImportJobService } from '../../../integrations/application/services/import-job.service';
 import { AppConfig } from '../../../../shared/config/configuration';
-import { STOCK_FEED_CLIENT, StockFeedClient } from '../ports/stock-feed.client';
+import {
+  FeedStockRow,
+  STOCK_FEED_CLIENT,
+  StockFeedClient,
+} from '../ports/stock-feed.client';
 import { SYNC_LOCK, SyncLock } from '../../../../shared/database/sync-lock';
 import { NotificationService } from '../../../notifications/application/services/notification.service';
 
@@ -28,6 +37,11 @@ export interface StockSyncRunResult {
   recordsProcessed: number;
   recordsFailed: number;
 }
+
+const sleep = (ms: number): Promise<void> =>
+  ms > 0
+    ? new Promise((resolve) => setTimeout(resolve, ms))
+    : Promise.resolve();
 
 const skipped = (reason: 'disabled' | 'locked'): StockSyncRunResult => ({
   status: 'skipped',
@@ -115,7 +129,7 @@ export class RoughCountryStockSyncService {
     let failed = 0;
 
     try {
-      const feedRows = await this.feed.fetchStockRows();
+      const feedRows = await this.fetchWithRetry(job.id);
       received = feedRows.length;
 
       // An empty sheet is indistinguishable from "everything went out of
@@ -209,6 +223,49 @@ export class RoughCountryStockSyncService {
         recordsProcessed: 0,
         recordsFailed: failed,
       };
+    }
+  }
+
+  /**
+   * Reads the feed, retrying a supplier that is merely unreachable.
+   *
+   * Scoped deliberately to the fetch. The rest of `execute` writes stock, and
+   * re-running it would re-apply writes that already landed. `ServiceUnavailable`
+   * is the only retried failure because it is the only one the feed client
+   * raises for transport — an unusable workbook, an empty sheet or a feed whose
+   * SKUs we do not carry are all stable answers, and asking three times pulls a
+   * ~16 MB workbook three times to reach the same conclusion.
+   */
+  private async fetchWithRetry(jobId: string): Promise<FeedStockRow[]> {
+    const { retryAttempts, retryBaseDelayMs } = this.config.get(
+      'roughCountry',
+      {
+        infer: true,
+      },
+    );
+
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.feed.fetchStockRows();
+      } catch (e) {
+        const isLast = attempt >= retryAttempts;
+        if (!(e instanceof ServiceUnavailableException) || isLast) throw e;
+
+        const reason = e instanceof Error ? e.message : String(e);
+        const waitMs = retryBaseDelayMs * 2 ** (attempt - 1);
+
+        this.logger.warn(
+          `Rough Country feed unreachable (attempt ${attempt}/${retryAttempts}): ${reason}; ` +
+            `retrying in ${waitMs}ms`,
+        );
+        await this.importJobs.addLog(jobId, {
+          level: 'warn',
+          message: `feed unreachable on attempt ${attempt} of ${retryAttempts}; retrying in ${waitMs}ms`,
+          payloadJson: { attempt, maxAttempts: retryAttempts, waitMs, reason },
+        });
+
+        await sleep(waitMs);
+      }
     }
   }
 

@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import {
@@ -60,6 +61,9 @@ describe('RoughCountryStockSyncService', () => {
       branchNvId: NV_BRANCH,
       branchTnId: TN_BRANCH,
       timeZone: 'America/Mexico_City',
+      retryAttempts: 3,
+      // Zero so the suite exercises the retry loop without waiting on it.
+      retryBaseDelayMs: 0,
       ...overrides,
     });
   };
@@ -233,6 +237,117 @@ describe('RoughCountryStockSyncService', () => {
       expect.objectContaining({ level: 'error' }),
     );
     expect(lock.release).toHaveBeenCalled();
+  });
+
+  describe('UC-06 FA-1: retrying an unreachable supplier', () => {
+    const unreachable = () =>
+      new ServiceUnavailableException(
+        'Rough Country stock feed is unreachable',
+      );
+
+    it('retries the fetch and completes the run when a later attempt succeeds', async () => {
+      feedClient.fetchStockRows
+        .mockRejectedValueOnce(unreachable())
+        .mockResolvedValueOnce([{ sku: 'ABC', nvStock: 4, tnStock: 2 }]);
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(new Set(['ABC']));
+
+      const result = await service.run();
+
+      expect(result.status).toBe('success');
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(2);
+      expect(inventoryRepo.bulkUpsertStock).toHaveBeenCalled();
+    });
+
+    it('gives up after the configured number of attempts and alerts', async () => {
+      feedClient.fetchStockRows.mockRejectedValue(unreachable());
+
+      const result = await service.run();
+
+      expect(result.status).toBe('failed');
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(3);
+      expect(notifications.create).toHaveBeenCalledWith(
+        expect.objectContaining({ eventKey: 'system.stock_sync_failed' }),
+      );
+      expect(lock.release).toHaveBeenCalled();
+    });
+
+    it('records every retry against the import job with a doubling wait', async () => {
+      configureSync({ retryBaseDelayMs: 0, retryAttempts: 3 });
+      feedClient.fetchStockRows.mockRejectedValue(unreachable());
+
+      await service.run();
+
+      const retries = (importJobs.addLog.mock.calls as LogCall[]).filter(
+        ([, dto]) => dto.payloadJson?.attempt !== undefined,
+      );
+      expect(retries).toHaveLength(2);
+      expect(retries.map(([, dto]) => dto.payloadJson?.attempt)).toEqual([
+        1, 2,
+      ]);
+    });
+
+    it('doubles the wait between attempts', async () => {
+      configureSync({ retryBaseDelayMs: 50, retryAttempts: 3 });
+      feedClient.fetchStockRows.mockRejectedValue(unreachable());
+
+      await service.run();
+
+      const waits = (importJobs.addLog.mock.calls as LogCall[])
+        .filter(([, dto]) => dto.payloadJson?.waitMs !== undefined)
+        .map(([, dto]) => dto.payloadJson?.waitMs);
+      expect(waits).toEqual([50, 100]);
+    });
+
+    it('does not retry a feed that answers with no rows', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([]);
+
+      const result = await service.run();
+
+      expect(result.status).toBe('failed');
+      // An empty sheet is a stable answer, not a transport failure: asking
+      // twice pulls a ~16 MB workbook twice to reach the same conclusion.
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry a feed whose SKUs are all unknown', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([
+        { sku: 'GHOST', nvStock: 1, tnStock: 1 },
+      ]);
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(
+        new Set<string>(),
+      );
+
+      const result = await service.run();
+
+      expect(result.status).toBe('failed');
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry a failure that is not a transport failure', async () => {
+      feedClient.fetchStockRows.mockRejectedValue(new Error('bad workbook'));
+
+      const result = await service.run();
+
+      expect(result.status).toBe('failed');
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(1);
+    });
+
+    it('never retries the write path', async () => {
+      feedClient.fetchStockRows.mockResolvedValue([
+        { sku: 'ABC', nvStock: 1, tnStock: 1 },
+      ]);
+      inventoryRepo.findExistingProductSkus.mockResolvedValue(new Set(['ABC']));
+      inventoryRepo.bulkUpsertStock.mockRejectedValue(
+        new ServiceUnavailableException('database is away'),
+      );
+
+      const result = await service.run();
+
+      expect(result.status).toBe('failed');
+      // Retrying here would re-apply writes that already landed.
+      expect(inventoryRepo.bulkUpsertStock).toHaveBeenCalledTimes(1);
+      expect(feedClient.fetchStockRows).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('releases the lock after a successful run', async () => {
