@@ -54,7 +54,7 @@ export class CreateQuoteDto {
   @IsUUID()
   customerId!: string;
 
-  /** Which price list to price against. Falls back to the default list. */
+  /** Staff override. Omitted resolves from the quote customer's profile, then default, then catalogue. */
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()

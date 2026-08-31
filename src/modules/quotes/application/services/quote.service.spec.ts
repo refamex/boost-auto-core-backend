@@ -11,6 +11,7 @@ import { DataSource } from 'typeorm';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { PriceListItemService } from '../../../commerce/application/services/price-list-item.service';
 import { PriceListService } from '../../../commerce/application/services/price-list.service';
+import { CustomerProfileService } from '../../../customers/application/services/customer-profile.service';
 import { OrderService } from '../../../orders/application/services/order.service';
 import { CreateOrderDto } from '../../../orders/infrastructure/http/dto/order.dto';
 import { ProductEntity } from '../../../pim/domain/entities/product.entity';
@@ -104,8 +105,13 @@ describe('QuoteService', () => {
     transaction: jest.fn((fn: (t: unknown) => unknown) => fn(txRepos)),
   };
 
-  const priceLists = { findApplicable: jest.fn(), findById: jest.fn() };
+  const priceLists = {
+    findApplicable: jest.fn(),
+    findApplicableOrNull: jest.fn(),
+    findById: jest.fn(),
+  };
   const priceListItems = { resolveApplicablePrice: jest.fn() };
+  const profiles = { findByAuthCustomerId: jest.fn() };
   const orders = { create: jest.fn(), createInternal: jest.fn() };
   const config = { get: jest.fn(() => TAX_RATE) };
 
@@ -129,7 +135,9 @@ describe('QuoteService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     priceLists.findApplicable.mockResolvedValue(priceList);
+    priceLists.findApplicableOrNull.mockResolvedValue(priceList);
     priceLists.findById.mockResolvedValue(priceList);
+    profiles.findByAuthCustomerId.mockResolvedValue(null);
     priceListItems.resolveApplicablePrice.mockResolvedValue({
       id: 'tier-10',
       price: 1250,
@@ -147,6 +155,7 @@ describe('QuoteService', () => {
         { provide: DataSource, useValue: dataSource },
         { provide: PriceListService, useValue: priceLists },
         { provide: PriceListItemService, useValue: priceListItems },
+        { provide: CustomerProfileService, useValue: profiles },
         { provide: OrderService, useValue: orders },
         { provide: ConfigService, useValue: config },
       ],
@@ -242,6 +251,47 @@ describe('QuoteService', () => {
         ForbiddenException,
       );
     });
+
+    it('prices omitted code from the quote customer profile', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({ priceListCode: 'VIP' });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+        currency: 'MXN',
+      });
+      priceListItems.resolveApplicablePrice.mockResolvedValue({
+        id: 'tier-vip',
+        price: 900,
+      });
+      await service.create(rep, createDto);
+      expect(profiles.findByAuthCustomerId).toHaveBeenCalledWith(CUSTOMER_ID);
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(savedQuoteItems()[0]).toMatchObject({ unitPriceSnapshot: 900 });
+    });
+
+    it('returns 404 when the named list is missing', async () => {
+      priceLists.findApplicableOrNull.mockRejectedValue(
+        new NotFoundException('PriceList GHOST not found'),
+      );
+      await expect(
+        service.create(rep, { ...createDto, priceListCode: 'GHOST' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('prices from the catalogue when no list applies', async () => {
+      priceLists.findApplicableOrNull.mockResolvedValue(null);
+      productRepo.find.mockResolvedValue([
+        { id: 42, sku: 'RC-1234', name: 'Lift Kit', price: 1100 },
+      ]);
+      await service.create(rep, createDto);
+      expect(quoteTxRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ priceListId: null, currency: 'MXN' }),
+      );
+      expect(savedQuoteItems()[0]).toMatchObject({
+        unitPriceSnapshot: 1100,
+        priceListItemId: undefined,
+      });
+    });
   });
 
   describe('lifecycle', () => {
@@ -319,6 +369,25 @@ describe('QuoteService', () => {
         expect.any(Date),
       );
     });
+
+    it('re-resolves omitted code from the quote customer profile', async () => {
+      quoteRepo.findOne.mockResolvedValue(makeQuote({ status: 'draft' }));
+      profiles.findByAuthCustomerId.mockResolvedValue({ priceListCode: 'VIP' });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+        currency: 'MXN',
+      });
+      priceListItems.resolveApplicablePrice.mockResolvedValue({
+        id: 'tier-vip',
+        price: 900,
+      });
+      await service.update(QUOTE_ID, rep, {});
+      expect(profiles.findByAuthCustomerId).toHaveBeenCalledWith(CUSTOMER_ID);
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(priceListItems.resolveApplicablePrice).toHaveBeenCalled();
+      expect(savedQuoteItems()[0]).toMatchObject({ unitPriceSnapshot: 900 });
+    });
   });
 
   describe('convert', () => {
@@ -351,6 +420,16 @@ describe('QuoteService', () => {
         }),
       );
       expect(priceListItems.resolveApplicablePrice).not.toHaveBeenCalled();
+    });
+
+    it('keeps snapshot prices when the customer is later assigned STANDARD', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
+      });
+      await service.convert(QUOTE_ID, rep);
+      expect(convertedOrderPayload().items[0].unitPrice).toBe(1250);
+      expect(profiles.findByAuthCustomerId).not.toHaveBeenCalled();
+      expect(priceLists.findApplicableOrNull).not.toHaveBeenCalled();
     });
 
     it('creates a draft order with no provider branch, so no stock is reserved', async () => {
