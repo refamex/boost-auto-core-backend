@@ -20,7 +20,9 @@ import {
 } from '../../../../shared/common/pagination/pagination.dto';
 import { PriceListItemService } from '../../../commerce/application/services/price-list-item.service';
 import { PriceListService } from '../../../commerce/application/services/price-list.service';
+import { documentPriceListCode } from '../../../commerce/domain/document-price-list-code';
 import { PriceListEntity } from '../../../commerce/domain/entities/price-list.entity';
+import { CustomerProfileService } from '../../../customers/application/services/customer-profile.service';
 import { OrderService } from '../../../orders/application/services/order.service';
 import { priceLine, round2 } from '../../../orders/domain/order-pricing';
 import { CreateOrderDto } from '../../../orders/infrastructure/http/dto/order.dto';
@@ -62,6 +64,7 @@ export class QuoteService {
     private readonly dataSource: DataSource,
     private readonly priceLists: PriceListService,
     private readonly priceListItems: PriceListItemService,
+    private readonly profiles: CustomerProfileService,
     private readonly orders: OrderService,
     private readonly config: ConfigService<AppConfig, true>,
   ) {}
@@ -100,7 +103,10 @@ export class QuoteService {
   ): Promise<QuoteView> {
     const salesRepId = this.assertRep(user);
     const now = new Date();
-    const priceList = await this.priceLists.findApplicable(dto.priceListCode);
+    const priceList = await this.applicableList(
+      dto.customerId,
+      dto.priceListCode,
+    );
     const { items, subtotal, taxTotal } = await this.priceItems(
       dto.items,
       priceList,
@@ -113,8 +119,8 @@ export class QuoteService {
           quoteNumber: this.generateQuoteNumber(),
           customerId: dto.customerId,
           salesRepId,
-          priceListId: priceList.id,
-          currency: priceList.currency,
+          priceListId: priceList?.id ?? null,
+          currency: priceList?.currency ?? 'MXN',
           status: 'draft',
           validUntil: dto.validUntil,
           notes: dto.notes,
@@ -159,17 +165,27 @@ export class QuoteService {
       );
     }
 
-    const priceList = dto.priceListCode
-      ? await this.priceLists.findApplicable(dto.priceListCode)
-      : await this.priceLists.findById(existing.priceListId!);
+    const priceList = await this.applicableList(
+      existing.customerId,
+      dto.priceListCode,
+    );
+    const resolvedId = priceList?.id ?? null;
+    const shouldReprice =
+      dto.items !== undefined || resolvedId !== existing.priceListId;
 
     const updated = await this.dataSource.transaction(async (tx) => {
       const quoteRepo = tx.getRepository(QuoteEntity);
       const itemRepo = tx.getRepository(QuoteItemEntity);
 
-      if (dto.items) {
+      if (shouldReprice) {
+        const lines =
+          dto.items ??
+          (existing.items ?? []).map((i) => ({
+            productId: i.productId,
+            qty: i.qty,
+          }));
         const { items, subtotal, taxTotal } = await this.priceItems(
-          dto.items,
+          lines,
           priceList,
           now,
         );
@@ -182,8 +198,8 @@ export class QuoteService {
         existing.grandTotal = round2(subtotal + taxTotal);
       }
 
-      existing.priceListId = priceList.id;
-      existing.currency = priceList.currency;
+      existing.priceListId = resolvedId;
+      existing.currency = priceList?.currency ?? 'MXN';
       if (dto.validUntil !== undefined) existing.validUntil = dto.validUntil;
       if (dto.notes !== undefined) existing.notes = dto.notes;
       await quoteRepo.save(existing);
@@ -351,9 +367,24 @@ export class QuoteService {
     return user.salesRepId;
   }
 
+  private async applicableList(
+    documentCustomerId: string,
+    bodyCode?: string,
+  ): Promise<PriceListEntity | null> {
+    const profile =
+      await this.profiles.findByAuthCustomerId(documentCustomerId);
+    return this.priceLists.findApplicableOrNull(
+      documentPriceListCode({
+        honorBodyCode: true,
+        bodyCode,
+        profileCode: profile?.priceListCode,
+      }),
+    );
+  }
+
   private async priceItems(
     lines: CreateQuoteItemDto[],
-    priceList: PriceListEntity,
+    priceList: PriceListEntity | null,
     now: Date,
   ): Promise<{
     items: Partial<QuoteItemEntity>[];
@@ -370,12 +401,9 @@ export class QuoteService {
 
     for (const line of lines) {
       const product = products.get(line.productId)!;
-      const priced = await this.resolvePrice(
-        priceList.id,
-        line.productId,
-        line.qty,
-        now,
-      );
+      const priced = priceList
+        ? await this.resolvePrice(priceList.id, line.productId, line.qty, now)
+        : this.cataloguePrice(product);
 
       // Tax is computed, never echoed from the request. A rep could otherwise
       // quote tax 0, approve it, and convert it into an order that carries the
@@ -401,6 +429,18 @@ export class QuoteService {
     }
 
     return { items, subtotal, taxTotal };
+  }
+
+  private cataloguePrice(product: ProductEntity): {
+    id?: string;
+    price: number;
+  } {
+    if (product.price == null) {
+      throw new UnprocessableEntityException(
+        `no applicable price for product ${product.id}`,
+      );
+    }
+    return { price: product.price };
   }
 
   /**

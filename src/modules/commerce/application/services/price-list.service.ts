@@ -86,6 +86,16 @@ export class PriceListService {
 
   async remove(id: string): Promise<void> {
     const existing = await this.findById(id);
-    await this.repo.remove(existing);
+    try {
+      await this.repo.remove(existing);
+    } catch (e) {
+      if (
+        e instanceof QueryFailedError &&
+        (e as { code?: string }).code === '23503'
+      ) {
+        throw new ConflictException('price list is still in use');
+      }
+      throw e;
+    }
   }
 }

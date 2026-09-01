@@ -1,14 +1,25 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { QueryFailedError } from 'typeorm';
 import { PriceListEntity } from '../../domain/entities/price-list.entity';
 import { PriceListService } from './price-list.service';
 
 const DEFAULT_LIST = { id: 'list-default', code: 'RETAIL', isDefault: true };
 const NAMED_LIST = { id: 'list-whl', code: 'WHOLESALE', isDefault: false };
 
+function fkViolation(): QueryFailedError {
+  const err = new QueryFailedError('DELETE', [], new Error('fk'));
+  (err as unknown as { code: string }).code = '23503';
+  return err;
+}
+
 describe('PriceListService', () => {
-  const repo = { findOne: jest.fn() };
+  const repo = { findOne: jest.fn(), remove: jest.fn() };
   let service: PriceListService;
 
   beforeEach(async () => {
@@ -71,6 +82,24 @@ describe('PriceListService', () => {
       await expect(service.findApplicableOrNull('NOPE')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('remove', () => {
+    it('maps an in-use FK delete (23503) to ConflictException', async () => {
+      repo.findOne.mockResolvedValue(NAMED_LIST);
+      repo.remove.mockRejectedValue(fkViolation());
+      await expect(service.remove(NAMED_LIST.id)).rejects.toThrow(
+        ConflictException,
+      );
+      expect(repo.remove).toHaveBeenCalledWith(NAMED_LIST);
+    });
+
+    it('deletes an unused list', async () => {
+      repo.findOne.mockResolvedValue(NAMED_LIST);
+      repo.remove.mockResolvedValue(NAMED_LIST);
+      await expect(service.remove(NAMED_LIST.id)).resolves.toBeUndefined();
+      expect(repo.remove).toHaveBeenCalledWith(NAMED_LIST);
     });
   });
 });

@@ -97,6 +97,7 @@ describe('OrderService', () => {
   const events = { emit: jest.fn() };
   const priceLists = { findApplicableOrNull: jest.fn() };
   const priceListItems = { tryResolveApplicablePrice: jest.fn() };
+  const profiles = { findByAuthCustomerId: jest.fn() };
   const config = { get: jest.fn(() => TAX_RATE) };
 
   let service: OrderService;
@@ -141,6 +142,7 @@ describe('OrderService', () => {
     // to pim.product.price. Tests that care override these two.
     priceLists.findApplicableOrNull.mockResolvedValue(null);
     priceListItems.tryResolveApplicablePrice.mockResolvedValue(null);
+    profiles.findByAuthCustomerId.mockResolvedValue(null);
     inventoryRepo.findBySkuAndBranch.mockResolvedValue({ id: 10 });
     orderTxRepo.findOne.mockResolvedValue(makeOrder());
     service = new OrderService(
@@ -157,6 +159,7 @@ describe('OrderService', () => {
       priceListItems as never,
       config as never,
       statusEventRepo as never,
+      profiles as never,
     );
   });
 
@@ -309,12 +312,15 @@ describe('OrderService', () => {
       });
     });
 
-    it('prefers the price list over pim.product.price', async () => {
-      priceLists.findApplicableOrNull.mockResolvedValue({
-        id: 'list-1',
-        code: 'WHOLESALE',
+    it('ignores a customer-tier body priceListCode and prices from the profile', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
       });
-      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 80 });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-std',
+        code: 'STANDARD',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 90 });
 
       await service.create(
         makeCreateDto({
@@ -324,9 +330,79 @@ describe('OrderService', () => {
         customer,
       );
 
-      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('WHOLESALE');
-      expect(persistedItems()[0]).toMatchObject({ unitPriceSnapshot: 80 });
-      expect(persistedOrder()).toMatchObject({ grandTotal: 92.8 });
+      expect(profiles.findByAuthCustomerId).toHaveBeenCalledWith('customer-1');
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('STANDARD');
+      expect(persistedItems()[0]).toMatchObject({ unitPriceSnapshot: 90 });
+    });
+
+    it('lets staff name a list even when the document customer is assigned another', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
+      });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 70 });
+
+      await service.create(
+        makeCreateDto({
+          priceListCode: 'VIP',
+          items: [{ productId: 1, qty: 1 }],
+        }),
+        staff,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(persistedItems()[0]).toMatchObject({ unitPriceSnapshot: 70 });
+    });
+
+    it('prices staff-omitted code from the document customer profile', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({ priceListCode: 'VIP' });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 70 });
+
+      await service.create(
+        makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+        staff,
+      );
+
+      expect(profiles.findByAuthCustomerId).toHaveBeenCalledWith('customer-1');
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(persistedItems()[0]).toMatchObject({ unitPriceSnapshot: 70 });
+    });
+
+    it('still sells on the catalogue when the profile has no assigned list', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({ priceListCode: null });
+      await service.create(
+        makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+        customer,
+      );
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith(undefined);
+      expect(persistedItems()[0]).toMatchObject({
+        unitPriceSnapshot: CATALOGUE_PRICE,
+      });
+    });
+
+    it('returns 404 when the assigned list does not exist', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'GHOST',
+      });
+      priceLists.findApplicableOrNull.mockImplementation((code?: string) =>
+        code === 'GHOST'
+          ? Promise.reject(new NotFoundException(`PriceList ${code} not found`))
+          : Promise.resolve(null),
+      );
+      await expect(
+        service.create(
+          makeCreateDto({ items: [{ productId: 1, qty: 1 }] }),
+          customer,
+        ),
+      ).rejects.toThrow(NotFoundException);
+      expect(orderTxRepo.save).not.toHaveBeenCalled();
     });
 
     it('resolves the price list once per order, not once per line', async () => {
@@ -435,6 +511,60 @@ describe('OrderService', () => {
       // point, which is exactly why grandTotal goes through round2.
       const order = persistedOrder();
       expect(round2(order.subtotal! + order.taxTotal!)).toBe(order.grandTotal);
+    });
+  });
+
+  describe('preview', () => {
+    it('ignores a customer-tier body priceListCode', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
+      });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-std',
+        code: 'STANDARD',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 90 });
+
+      const result = await service.preview(
+        {
+          customerId: 'customer-1',
+          priceListCode: 'WHOLESALE',
+          items: [{ productId: 1, qty: 1 }],
+        },
+        customer,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('STANDARD');
+      expect(result.items[0]).toMatchObject({
+        unitPrice: 90,
+        source: 'price-list',
+      });
+    });
+
+    it('lets staff name a list on preview even when the document customer is assigned another', async () => {
+      profiles.findByAuthCustomerId.mockResolvedValue({
+        priceListCode: 'STANDARD',
+      });
+      priceLists.findApplicableOrNull.mockResolvedValue({
+        id: 'list-vip',
+        code: 'VIP',
+      });
+      priceListItems.tryResolveApplicablePrice.mockResolvedValue({ price: 70 });
+
+      const result = await service.preview(
+        {
+          customerId: 'customer-1',
+          priceListCode: 'VIP',
+          items: [{ productId: 1, qty: 1 }],
+        },
+        staff,
+      );
+
+      expect(priceLists.findApplicableOrNull).toHaveBeenCalledWith('VIP');
+      expect(result.items[0]).toMatchObject({
+        unitPrice: 70,
+        source: 'price-list',
+      });
     });
   });
 
