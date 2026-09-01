@@ -431,7 +431,10 @@ export class QuoteService {
     return { items, subtotal, taxTotal };
   }
 
-  private cataloguePrice(product: ProductEntity): { id?: string; price: number } {
+  private cataloguePrice(product: ProductEntity): {
+    id?: string;
+    price: number;
+  } {
     if (product.price == null) {
       throw new UnprocessableEntityException(
         `no applicable price for product ${product.id}`,
