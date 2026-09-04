@@ -36,7 +36,10 @@ describe('UpdateCustomerDto — link-once cannot be smuggled through PATCH', () 
 
   it('rejects authCustomerId on update', async () => {
     await expect(
-      pipe.transform({ authCustomerId: AUTH_CUSTOMER_ID }, asBody(UpdateCustomerDto)),
+      pipe.transform(
+        { authCustomerId: AUTH_CUSTOMER_ID },
+        asBody(UpdateCustomerDto),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -54,14 +57,23 @@ describe('UpdateCustomerDto — link-once cannot be smuggled through PATCH', () 
     // does not declare it (D7). If it ever starts passing, the pipe config
     // drifted rather than this DTO.
     await expect(
-      pipe.transform({ ownerSalesRepId: AUTH_CUSTOMER_ID }, asBody(UpdateCustomerDto)),
+      pipe.transform(
+        { ownerSalesRepId: AUTH_CUSTOMER_ID },
+        asBody(UpdateCustomerDto),
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('still accepts the fields an update is actually for', async () => {
     await expect(
-      pipe.transform({ legalName: 'Refamex SA de CV', isActive: false }, asBody(UpdateCustomerDto)),
-    ).resolves.toMatchObject({ legalName: 'Refamex SA de CV', isActive: false });
+      pipe.transform(
+        { legalName: 'Refamex SA de CV', isActive: false },
+        asBody(UpdateCustomerDto),
+      ),
+    ).resolves.toMatchObject({
+      legalName: 'Refamex SA de CV',
+      isActive: false,
+    });
   });
 
   it('keeps authCustomerId accepted on create, which is where linking belongs', async () => {

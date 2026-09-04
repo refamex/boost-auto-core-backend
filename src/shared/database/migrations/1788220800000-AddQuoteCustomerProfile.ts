@@ -48,7 +48,9 @@ export class AddQuoteCustomerProfile1788220800000 implements MigrationInterface 
     await queryRunner.query(
       `DELETE FROM quotes.quotes WHERE customer_id IS NULL`,
     );
-    await queryRunner.query(`DROP INDEX IF EXISTS quotes.idx_quotes_customer_profile_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS quotes.idx_quotes_customer_profile_id`,
+    );
     await queryRunner.query(
       `ALTER TABLE quotes.quotes ALTER COLUMN customer_id SET NOT NULL`,
     );

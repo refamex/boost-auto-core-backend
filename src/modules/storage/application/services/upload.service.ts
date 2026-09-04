@@ -77,7 +77,7 @@ export class UploadService {
         randomUUID(),
         new Date(),
       ),
-      contentType: input.contentType.split(';')[0]!.trim().toLowerCase(),
+      contentType: input.contentType.split(';')[0].trim().toLowerCase(),
       contentLength: input.size,
     });
   }

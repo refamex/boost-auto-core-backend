@@ -12,10 +12,7 @@ import { OrderItemEntity } from '../../../orders/domain/entities/order-item.enti
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { PolarCheckoutEntity } from '../../../payments/domain/entities/polar-checkout.entity';
 import { ProductDimensionEntity } from '../../../pim/domain/entities/product-dimension.entity';
-import {
-  NoShippingCoverageError,
-  ParcelNotComputableError,
-} from '../../domain/shipping-errors';
+import { NoShippingCoverageError } from '../../domain/shipping-errors';
 import { SKYDROPX_CLIENT } from '../ports/skydropx.client';
 import { ShippingQuoteService } from './shipping-quote.service';
 
@@ -279,7 +276,7 @@ describe('ShippingQuoteService', () => {
     });
 
     it('prices the order with the amount SKYDROPX returned', async () => {
-      const order = { ...quoted } as OrderEntity;
+      const order = { ...quoted };
       orderRepo.findOne.mockResolvedValue(order);
 
       await service.selectRate('order-uuid', 'r-1', customer);
@@ -293,7 +290,7 @@ describe('ShippingQuoteService', () => {
     });
 
     it('stamps shippingQuotedAt, which is what unlocks payment', async () => {
-      const order = { ...quoted } as OrderEntity;
+      const order = { ...quoted };
       orderRepo.findOne.mockResolvedValue(order);
 
       await service.selectRate('order-uuid', 'r-1', customer);
@@ -303,7 +300,7 @@ describe('ShippingQuoteService', () => {
     it('does not add tax to the freight', async () => {
       // The carrier's price is already final. Taxing it again would invent a
       // charge nobody quoted and break `tax_total` reconciling with the lines.
-      const order = { ...quoted } as OrderEntity;
+      const order = { ...quoted };
       orderRepo.findOne.mockResolvedValue(order);
 
       await service.selectRate('order-uuid', 'r-1', customer);
@@ -311,7 +308,7 @@ describe('ShippingQuoteService', () => {
     });
 
     it('rejects a rate that was never offered', async () => {
-      orderRepo.findOne.mockResolvedValue({ ...quoted } as OrderEntity);
+      orderRepo.findOne.mockResolvedValue({ ...quoted });
       await expect(
         service.selectRate('order-uuid', 'forged-rate', customer),
       ).rejects.toThrow(ConflictException);

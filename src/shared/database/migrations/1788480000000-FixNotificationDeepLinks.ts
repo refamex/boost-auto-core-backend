@@ -20,9 +20,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * The old paths carried the entity id, so both directions are derivable and
  * `down()` is a real inverse rather than a guess.
  */
-export class FixNotificationDeepLinks1788480000000
-  implements MigrationInterface
-{
+export class FixNotificationDeepLinks1788480000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       UPDATE notifications.notifications

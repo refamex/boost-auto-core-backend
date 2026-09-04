@@ -66,7 +66,12 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
    * signals those visibility modules read to bypass ownership scoping
    * entirely, which is the one thing a rep must never do.
    */
-  sales_rep: ['customers:read', 'customers:write', 'quotes:read', 'quotes:write'],
+  sales_rep: [
+    'customers:read',
+    'customers:write',
+    'quotes:read',
+    'quotes:write',
+  ],
 };
 
 /** Expands a caller's macro roles into their full granted-permission set. */

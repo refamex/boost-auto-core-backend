@@ -134,7 +134,9 @@ export class SkydropxHttpClient implements SkydropxClient {
       });
     } catch (error) {
       const name = error instanceof Error ? error.name : 'Unknown';
-      this.logger.error(`Skydropx ${label} failed after ${timeoutMs}ms: ${name}`);
+      this.logger.error(
+        `Skydropx ${label} failed after ${timeoutMs}ms: ${name}`,
+      );
       throw new ServiceUnavailableException('Skydropx is not responding');
     }
   }

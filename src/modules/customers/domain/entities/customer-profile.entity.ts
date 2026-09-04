@@ -46,10 +46,20 @@ export class CustomerProfileEntity {
   @Column({ type: 'varchar', length: 5, name: 'tax_regime', nullable: true })
   taxRegime?: string | null;
 
-  @Column({ type: 'varchar', length: 5, name: 'uso_cfdi_default', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 5,
+    name: 'uso_cfdi_default',
+    nullable: true,
+  })
   usoCfdiDefault?: string | null;
 
-  @Column({ type: 'varchar', length: 10, name: 'fiscal_postal_code', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 10,
+    name: 'fiscal_postal_code',
+    nullable: true,
+  })
   fiscalPostalCode?: string | null;
 
   @Column({

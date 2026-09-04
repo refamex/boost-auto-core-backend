@@ -81,7 +81,12 @@ export class InvoiceEntity {
   @Column({ type: 'varchar', length: 10, name: 'cfdi_version', nullable: true })
   cfdiVersion?: string | null;
 
-  @Column({ type: 'varchar', length: 5, name: 'tipo_comprobante', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 5,
+    name: 'tipo_comprobante',
+    nullable: true,
+  })
   tipoComprobante?: string | null;
 
   @Column({ type: 'varchar', length: 25, nullable: true })
@@ -103,10 +108,20 @@ export class InvoiceEntity {
   @Column({ type: 'text', name: 'sello_sat', nullable: true })
   selloSat?: string | null;
 
-  @Column({ type: 'varchar', length: 20, name: 'no_certificado_emisor', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'no_certificado_emisor',
+    nullable: true,
+  })
   noCertificadoEmisor?: string | null;
 
-  @Column({ type: 'varchar', length: 20, name: 'no_certificado_sat', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 20,
+    name: 'no_certificado_sat',
+    nullable: true,
+  })
   noCertificadoSat?: string | null;
 
   @Column({ type: 'text', name: 'cadena_original_sat', nullable: true })
@@ -121,18 +136,38 @@ export class InvoiceEntity {
   @Column({ type: 'varchar', length: 5, name: 'uso_cfdi', nullable: true })
   usoCfdi?: string | null;
 
-  @Column({ type: 'varchar', length: 5, name: 'regimen_fiscal_emisor', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 5,
+    name: 'regimen_fiscal_emisor',
+    nullable: true,
+  })
   regimenFiscalEmisor?: string | null;
 
-  @Column({ type: 'varchar', length: 5, name: 'regimen_fiscal_receptor', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 5,
+    name: 'regimen_fiscal_receptor',
+    nullable: true,
+  })
   regimenFiscalReceptor?: string | null;
 
   /** CP del domicilio fiscal del receptor. Obligatorio en 4.0 y no existia. */
-  @Column({ type: 'varchar', length: 10, name: 'domicilio_fiscal_receptor', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 10,
+    name: 'domicilio_fiscal_receptor',
+    nullable: true,
+  })
   domicilioFiscalReceptor?: string | null;
 
   // --- Cancelacion. El SAT no borra: sustituye. ---
-  @Column({ type: 'varchar', length: 30, name: 'cancel_status', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 30,
+    name: 'cancel_status',
+    nullable: true,
+  })
   cancelStatus?: string | null;
 
   /** Clave del catalogo c_MotivoCancelacion. `01` exige `uuidSustitucion`. */

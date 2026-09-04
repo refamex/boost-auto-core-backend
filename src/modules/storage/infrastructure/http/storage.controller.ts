@@ -19,7 +19,8 @@ export class StorageController {
    */
   @Post('uploads')
   @ApiOperation({
-    summary: 'Firma una subida directa a S3 (los bytes no pasan por este servicio)',
+    summary:
+      'Firma una subida directa a S3 (los bytes no pasan por este servicio)',
   })
   requestUpload(
     @Body() dto: RequestUploadDto,

@@ -276,7 +276,7 @@ export class OrderEntity {
    *  without re-quoting — a second call returns different ids, and possibly a
    *  different price. */
   @Column({ type: 'jsonb', name: 'shipping_rates_json', nullable: true })
-  shippingRatesJson?: unknown | null;
+  shippingRatesJson?: unknown;
 
   @Column({ type: 'timestamp', name: 'placed_at', default: () => 'NOW()' })
   placedAt!: Date;

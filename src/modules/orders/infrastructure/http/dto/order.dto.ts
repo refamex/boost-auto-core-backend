@@ -133,7 +133,9 @@ export class CreateOrderDto {
   @IsOptional()
   shipToStreet1?: string;
 
-  @ApiPropertyOptional({ description: 'Código postal. Decide tarifa y cobertura.' })
+  @ApiPropertyOptional({
+    description: 'Código postal. Decide tarifa y cobertura.',
+  })
   @IsString()
   @IsOptional()
   shipToPostalCode?: string;

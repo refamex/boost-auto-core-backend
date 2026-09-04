@@ -14,10 +14,7 @@ import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface
 import { ProductDimensionEntity } from '../../../pim/domain/entities/product-dimension.entity';
 import { OrderItemEntity } from '../../../orders/domain/entities/order-item.entity';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
-import {
-  orderGrandTotal,
-  round2,
-} from '../../../orders/domain/order-pricing';
+import { orderGrandTotal, round2 } from '../../../orders/domain/order-pricing';
 import { tierOf } from '../../../orders/domain/order-visibility';
 import { TERMINAL_CHECKOUT_STATUSES } from '../../../payments/domain/checkout-status';
 import { PolarCheckoutEntity } from '../../../payments/domain/entities/polar-checkout.entity';

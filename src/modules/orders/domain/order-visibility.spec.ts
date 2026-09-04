@@ -1,10 +1,5 @@
 import { AuthenticatedUser } from '../../../shared/auth/jwt-payload.interface';
-import {
-  bindCreate,
-  buildWhere,
-  isStaff,
-  tierOf,
-} from './order-visibility';
+import { bindCreate, buildWhere, isStaff, tierOf } from './order-visibility';
 
 const admin: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
 const rep: AuthenticatedUser = {
@@ -152,9 +147,9 @@ describe('isStaff', () => {
     // The case that motivates reading the claim at all: warehouse and office
     // staff hold no orders:admin and no salesRepId, so `tierOf` calls them
     // customers and the profile gate would block them.
-    expect(
-      isStaff({ id: 'emp-1', roles: [], employeeId: 'employee-9' }),
-    ).toBe(true);
+    expect(isStaff({ id: 'emp-1', roles: [], employeeId: 'employee-9' })).toBe(
+      true,
+    );
   });
 
   it('recognises an admin, even on a token minted before the claim existed', () => {

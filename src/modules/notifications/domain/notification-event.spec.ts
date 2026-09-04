@@ -103,9 +103,7 @@ describe('dedupeKeyFor', () => {
 
 describe('linkFor', () => {
   it('points invoice notifications at the invoice', () => {
-    expect(linkFor('invoice.available', 'inv-1')).toBe(
-      '/account/invoices',
-    );
+    expect(linkFor('invoice.available', 'inv-1')).toBe('/account/invoices');
   });
 
   it('points order notifications at the order', () => {
@@ -116,7 +114,9 @@ describe('linkFor', () => {
   it('gives system alerts no link at all', () => {
     // Their entity id is the feed's job type, not a document the customer can
     // open, so `/orders/rough-country-stock` would be one more 404.
-    expect(linkFor('system.stock_sync_failed', 'rough-country-stock')).toBeNull();
+    expect(
+      linkFor('system.stock_sync_failed', 'rough-country-stock'),
+    ).toBeNull();
     expect(
       linkFor('system.stock_sync_config_error', 'rough-country-stock'),
     ).toBeNull();

@@ -19,7 +19,11 @@ const parcelOf = (lines: ParcelLine[]) => {
 
 describe('parcelFromLines', () => {
   it('passes a single item through, rounding up its dimensions', () => {
-    expect(parcelOf([line({ weight: 2.5, length: 30.2, width: 20.7, height: 10.1 })])).toEqual({
+    expect(
+      parcelOf([
+        line({ weight: 2.5, length: 30.2, width: 20.7, height: 10.1 }),
+      ]),
+    ).toEqual({
       weight: 2.5,
       length: 31,
       width: 21,
@@ -109,7 +113,9 @@ describe('parcelFromLines', () => {
   it('does NOT reject an oversize piece — that answer belongs to Skydropx', () => {
     // A third of this catalogue exceeds ordinary parcel limits. Refusing them
     // here would block those sales on our guess about what carriers accept.
-    const parcel = parcelOf([line({ sku: 'HUGE', length: 251, width: 92, height: 24, weight: 80 })]);
+    const parcel = parcelOf([
+      line({ sku: 'HUGE', length: 251, width: 92, height: 24, weight: 80 }),
+    ]);
     expect(parcel).toEqual({ weight: 80, length: 251, width: 92, height: 24 });
   });
 });

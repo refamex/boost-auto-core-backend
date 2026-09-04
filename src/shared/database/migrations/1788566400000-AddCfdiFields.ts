@@ -108,7 +108,9 @@ export class AddCfdiFields1788566400000 implements MigrationInterface {
         DROP COLUMN uso_cfdi_default,
         DROP COLUMN tax_regime
     `);
-    await queryRunner.query(`DROP INDEX IF EXISTS billing.uq_invoices_uuid_fiscal`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS billing.uq_invoices_uuid_fiscal`,
+    );
     await queryRunner.query(`
       ALTER TABLE billing.invoices
         DROP COLUMN cancelled_at,

@@ -89,7 +89,7 @@ export function checkUpload(input: {
 
   // Browsers append parameters (`text/xml; charset=utf-8`), and the comparison
   // has to survive that without loosening into a prefix match.
-  const bare = input.contentType.split(';')[0]!.trim().toLowerCase();
+  const bare = input.contentType.split(';')[0].trim().toLowerCase();
   if (!rule.contentTypes.includes(bare)) {
     return {
       ok: false,
@@ -98,11 +98,17 @@ export function checkUpload(input: {
   }
 
   if (!Number.isFinite(input.size) || input.size <= 0) {
-    return { ok: false, rejection: { reason: 'too-large', maxBytes: rule.maxBytes } };
+    return {
+      ok: false,
+      rejection: { reason: 'too-large', maxBytes: rule.maxBytes },
+    };
   }
 
   if (input.size > rule.maxBytes) {
-    return { ok: false, rejection: { reason: 'too-large', maxBytes: rule.maxBytes } };
+    return {
+      ok: false,
+      rejection: { reason: 'too-large', maxBytes: rule.maxBytes },
+    };
   }
 
   return { ok: true, rule };
@@ -131,7 +137,7 @@ export function buildObjectKey(
   id: string,
   now: Date,
 ): string {
-  const bare = contentType.split(';')[0]!.trim().toLowerCase();
+  const bare = contentType.split(';')[0].trim().toLowerCase();
   const ext = EXTENSIONS[bare] ?? 'bin';
   const yyyy = now.getUTCFullYear();
   const mm = String(now.getUTCMonth() + 1).padStart(2, '0');

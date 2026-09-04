@@ -103,7 +103,12 @@ export class ProductEntity {
    * Pero sin ellas no se timbra, aunque el PAC este contratado — y eso es una
    * bandera para quien planifique, no un detalle tecnico.
    */
-  @Column({ type: 'varchar', length: 8, name: 'clave_prod_serv', nullable: true })
+  @Column({
+    type: 'varchar',
+    length: 8,
+    name: 'clave_prod_serv',
+    nullable: true,
+  })
   claveProdServ?: string | null;
 
   @Column({ type: 'varchar', length: 3, name: 'clave_unidad', nullable: true })

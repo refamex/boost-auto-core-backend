@@ -22,10 +22,14 @@ const NO_PAC =
  */
 @Injectable()
 export class UnconfiguredStampingProvider implements StampingProvider {
+  // Both parameters are part of the port and are deliberately ignored: this
+  // adapter answers the same way whatever it is asked.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   stamp(_invoiceId: string): Promise<StampOutcome> {
     return Promise.resolve({ status: 'unavailable', reason: NO_PAC });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   cancel(_input: CancelInput): Promise<CancelOutcome> {
     return Promise.resolve({ status: 'unavailable', reason: NO_PAC });
   }

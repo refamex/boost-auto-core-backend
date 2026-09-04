@@ -17,7 +17,12 @@ const okJson = (body: unknown) =>
 
 const QUOTE_INPUT = {
   origin: { name: 'O', street1: 'a', postalCode: '01000', countryCode: 'MX' },
-  destination: { name: 'D', street1: 'b', postalCode: '64000', countryCode: 'MX' },
+  destination: {
+    name: 'D',
+    street1: 'b',
+    postalCode: '64000',
+    countryCode: 'MX',
+  },
   parcel: { weight: 2, length: 30, width: 20, height: 10 },
 };
 
@@ -28,12 +33,14 @@ describe('SkydropxHttpClient — request deadlines', () => {
   beforeEach(() => {
     client = new SkydropxHttpClient(config);
     fetchMock = jest.fn();
-    global.fetch = fetchMock as unknown as typeof fetch;
+    global.fetch = fetchMock;
     jest.spyOn(client['logger'], 'error').mockImplementation(() => undefined);
   });
 
-  const signalOf = (call: number): AbortSignal =>
-    (fetchMock.mock.calls[call][1] as RequestInit).signal as AbortSignal;
+  const signalOf = (call: number): AbortSignal => {
+    const [, init] = fetchMock.mock.calls[call] as [string, RequestInit];
+    return init.signal as AbortSignal;
+  };
 
   it('passes an abort signal on every call', async () => {
     // Before this, a hung Skydropx hung the checkout request with it — there

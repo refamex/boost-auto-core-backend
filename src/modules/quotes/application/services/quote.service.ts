@@ -425,7 +425,10 @@ export class QuoteService {
   private async resolveTarget(
     user: AuthenticatedUser,
     dto: CreateQuoteDto,
-  ): Promise<{ customerId: string | null; profile: CustomerProfileEntity | null }> {
+  ): Promise<{
+    customerId: string | null;
+    profile: CustomerProfileEntity | null;
+  }> {
     const { customerId, customerProfileId } = dto;
 
     if (Boolean(customerId) === Boolean(customerProfileId)) {

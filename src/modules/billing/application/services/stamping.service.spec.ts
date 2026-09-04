@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { InvoiceEntity } from '../../domain/entities/invoice.entity';
@@ -147,9 +144,9 @@ describe('StampingService', () => {
         complete({ uuidFiscal: '33333333-3333-4333-8333-333333333333' }),
       );
 
-      await expect(
-        service.cancel('inv-1', { motivo: '01' }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.cancel('inv-1', { motivo: '01' })).rejects.toThrow(
+        ConflictException,
+      );
       expect(pac.cancel).not.toHaveBeenCalled();
     });
 
@@ -196,8 +193,8 @@ describe('UnconfiguredStampingProvider', () => {
   });
 
   it('tampoco cancela', async () => {
-    expect((await provider.cancel({ uuidFiscal: 'u', motivo: '02' })).status).toBe(
-      'unavailable',
-    );
+    expect(
+      (await provider.cancel({ uuidFiscal: 'u', motivo: '02' })).status,
+    ).toBe('unavailable');
   });
 });

@@ -47,7 +47,7 @@ export function negotiatedPrice({
   }
 
   if (hasPrice) {
-    const effective = round2(unitPrice!);
+    const effective = round2(unitPrice);
     // Derived, not assumed zero: a manual price IS a discount when it lands
     // below list, and recording it as 0% would hide exactly what a later
     // review is looking for. A price ABOVE list is a surcharge, not a negative
@@ -59,8 +59,8 @@ export function negotiatedPrice({
 
   if (hasDiscount) {
     return {
-      effective: round2(listPrice * (1 - discountPct! / 100)),
-      discountPct: round2(discountPct!),
+      effective: round2(listPrice * (1 - discountPct / 100)),
+      discountPct: round2(discountPct),
     };
   }
 

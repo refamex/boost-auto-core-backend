@@ -49,9 +49,9 @@ describe('checkUpload', () => {
     ).toBe(true);
 
     // ...but a type that merely STARTS with an allowed one is still rejected.
-    expect(
-      checkUpload({ ...image, contentType: 'image/jpeg-evil' }).ok,
-    ).toBe(false);
+    expect(checkUpload({ ...image, contentType: 'image/jpeg-evil' }).ok).toBe(
+      false,
+    );
   });
 
   it('rejects a file over the limit and says what the limit is', () => {
