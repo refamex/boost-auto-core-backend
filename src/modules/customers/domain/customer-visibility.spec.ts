@@ -102,4 +102,55 @@ describe('isVisibleToUser', () => {
     expect(isVisibleToUser(null, admin)).toBe(false);
     expect(isVisibleToUser(undefined, otherRep)).toBe(false);
   });
+
+  describe('owner tier — the shopper the profile belongs to', () => {
+    const shopper: AuthenticatedUser = { id: 'cust-9', roles: ['customer'] };
+
+    it('sees its own profile even with no rep and no admin permission', () => {
+      // Without this the address book is read-only for its owner: listing
+      // works (it resolves by auth_customer_id) but editing a row 404s.
+      expect(
+        isVisibleToUser(
+          { ownerSalesRepId: null, authCustomerId: 'cust-9' },
+          shopper,
+        ),
+      ).toBe(true);
+    });
+
+    it('still sees it after a rep claims the account', () => {
+      expect(
+        isVisibleToUser(
+          { ownerSalesRepId: 'rep-1', authCustomerId: 'cust-9' },
+          shopper,
+        ),
+      ).toBe(true);
+    });
+
+    it('never sees another shopper profile', () => {
+      expect(
+        isVisibleToUser(
+          { ownerSalesRepId: null, authCustomerId: 'cust-8' },
+          shopper,
+        ),
+      ).toBe(false);
+    });
+
+    it('does not match an unlinked profile', () => {
+      // authCustomerId is nullable, and a null must never be treated as
+      // "belongs to whoever is asking".
+      expect(
+        isVisibleToUser(
+          { ownerSalesRepId: null, authCustomerId: null },
+          shopper,
+        ),
+      ).toBe(false);
+      expect(isVisibleToUser({ ownerSalesRepId: null }, shopper)).toBe(false);
+    });
+
+    it('did NOT leak into buildWhere, which still backs the staff listing', () => {
+      // Widening the list predicate would turn "see your own profile" into
+      // "page through every customer".
+      expect(buildWhere(shopper, {})).toBeNull();
+    });
+  });
 });

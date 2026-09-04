@@ -252,4 +252,67 @@ describe('CustomerProfileService', () => {
       expect(await service.findByAuthCustomerId(AUTH_CUSTOMER_ID)).toBeNull();
     });
   });
+
+  describe('ensureSelfServiceProfile', () => {
+    const shopper: AuthenticatedUser = {
+      id: AUTH_CUSTOMER_ID,
+      email: 'ana@example.com',
+      roles: ['customer'],
+    };
+
+    it('returns the existing profile without writing anything', async () => {
+      const existing = makeProfile({ authCustomerId: AUTH_CUSTOMER_ID });
+      repo.findOne.mockResolvedValue(existing);
+
+      expect(await service.ensureSelfServiceProfile(shopper)).toBe(existing);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('creates an unowned house account for a shopper with no rep', async () => {
+      // `create()` refuses a caller with no salesRepId, which is every
+      // self-registered shopper. Without this path "save my address" fails for
+      // exactly the people the address book exists for.
+      repo.findOne.mockResolvedValue(null);
+      await service.ensureSelfServiceProfile(shopper);
+
+      expect(repo.create).toHaveBeenCalledWith({
+        authCustomerId: AUTH_CUSTOMER_ID,
+        displayName: 'ana@example.com',
+        email: 'ana@example.com',
+        ownerSalesRepId: null,
+      });
+    });
+
+    it('falls back to the user id when the token carries no email', async () => {
+      repo.findOne.mockResolvedValue(null);
+      await service.ensureSelfServiceProfile({
+        id: AUTH_CUSTOMER_ID,
+        roles: ['customer'],
+      });
+
+      expect(repo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          displayName: AUTH_CUSTOMER_ID,
+          email: null,
+        }),
+      );
+    });
+
+    it('re-reads instead of failing when two tabs save the first address at once', async () => {
+      const raced = makeProfile({ authCustomerId: AUTH_CUSTOMER_ID });
+      repo.findOne.mockResolvedValueOnce(null).mockResolvedValueOnce(raced);
+      repo.save.mockRejectedValueOnce(duplicateKeyError());
+
+      expect(await service.ensureSelfServiceProfile(shopper)).toBe(raced);
+    });
+
+    it('rethrows a duplicate that is not the race it expected', async () => {
+      repo.findOne.mockResolvedValue(null);
+      repo.save.mockRejectedValueOnce(duplicateKeyError());
+
+      await expect(service.ensureSelfServiceProfile(shopper)).rejects.toThrow(
+        QueryFailedError,
+      );
+    });
+  });
 });

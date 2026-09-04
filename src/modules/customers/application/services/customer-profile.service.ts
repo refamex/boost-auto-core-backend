@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
@@ -24,6 +25,8 @@ import {
 
 @Injectable()
 export class CustomerProfileService {
+  private readonly logger = new Logger(CustomerProfileService.name);
+
   constructor(
     @InjectRepository(CustomerProfileEntity)
     private readonly repo: Repository<CustomerProfileEntity>,
@@ -92,6 +95,51 @@ export class CustomerProfileService {
       return await this.repo.save(profile);
     } catch (err) {
       throw this.translateDuplicateAuthCustomerId(err, dto.authCustomerId);
+    }
+  }
+
+  /**
+   * The profile a shopper's own address book hangs off, creating it if this is
+   * the first time they save an address.
+   *
+   * WHY AUTO-PROVISION: profiles are created by sales reps, and `create()`
+   * above refuses a caller with no `salesRepId`. A shopper who signed up on the
+   * storefront therefore has no row at all — so without this, "save my address"
+   * would fail for exactly the people the address book is for.
+   *
+   * `ownerSalesRepId: null` is not a gap: the entity documents NULL as an
+   * unassigned house account, which is precisely what a self-registered shopper
+   * is until a rep claims them. `displayName` is the email because it is the
+   * only human-readable thing the JWT carries; a rep renames it later.
+   *
+   * The 23505 catch is the concurrent-first-save case: two tabs, one partial
+   * unique index on `auth_customer_id`. The loser re-reads instead of failing,
+   * because both callers wanted the same row, not two rows.
+   */
+  async ensureSelfServiceProfile(
+    user: AuthenticatedUser,
+  ): Promise<CustomerProfileEntity> {
+    const existing = await this.findByAuthCustomerId(user.id);
+    if (existing) return existing;
+
+    try {
+      return await this.repo.save(
+        this.repo.create({
+          authCustomerId: user.id,
+          displayName: user.email ?? user.id,
+          email: user.email ?? null,
+          ownerSalesRepId: null,
+        }),
+      );
+    } catch (err) {
+      if (
+        err instanceof QueryFailedError &&
+        (err as { code?: string }).code === '23505'
+      ) {
+        const raced = await this.findByAuthCustomerId(user.id);
+        if (raced) return raced;
+      }
+      throw err;
     }
   }
 
@@ -168,8 +216,54 @@ export class CustomerProfileService {
       );
     }
 
+    await this.claimPendingQuotes(id, authCustomerId);
+
     existing.authCustomerId = authCustomerId;
     return existing;
+  }
+
+  /**
+   * Hands the customer the quotes written for them before they had an account.
+   *
+   * A rep quotes people who have not signed up yet — that is the normal order
+   * of a sale. Those quotes carry `customer_profile_id` and a NULL
+   * `customer_id`, so `/v1/quotes/me` (which filters by the caller's own id)
+   * cannot see them. Linking is the moment that identity finally exists, so it
+   * is the moment to fill it in; otherwise the customer signs up and finds
+   * nothing, and the rep's work is invisible to the only person it was for.
+   *
+   * WHY RAW SQL AND NOT THE QUOTE SERVICE: `quotes` already depends on
+   * `customers` (it resolves profiles and price lists through this service).
+   * Importing back would close a cycle for a single UPDATE. The table is
+   * addressed directly instead, which is also why the WHERE clause is written
+   * defensively — `customer_id IS NULL` makes this idempotent and unable to
+   * overwrite a quote that already found its reader.
+   *
+   * Not wrapped in a transaction with the link above on purpose: the link is
+   * the fact that matters and it is already committed. If this sweep fails,
+   * re-running the link is impossible (link-once), so failing the whole call
+   * would strand the profile. A missed quote is recoverable; a lost link is not.
+   */
+  private async claimPendingQuotes(
+    profileId: string,
+    authCustomerId: string,
+  ): Promise<void> {
+    try {
+      await this.repo.manager.query(
+        `UPDATE quotes.quotes
+            SET customer_id = $1
+          WHERE customer_profile_id = $2
+            AND customer_id IS NULL`,
+        [authCustomerId, profileId],
+      );
+    } catch (err) {
+      this.logger.error(
+        `Customer ${profileId} was linked to ${authCustomerId}, but its pending ` +
+          `quotes could not be claimed. They stay invisible to the customer ` +
+          `until this is re-run.`,
+        err instanceof Error ? err.stack : String(err),
+      );
+    }
   }
 
   private async loadVisible(
