@@ -65,3 +65,16 @@ export class CreateShipmentDto {
   @IsString()
   rateId!: string;
 }
+
+/**
+ * A choice, not a price.
+ *
+ * There is deliberately no `amount` here. The service reads what the rate costs
+ * from the quote Skydropx returned, stored on the order — accepting an amount
+ * from the browser would let a shopper name their own freight, and the value
+ * would land in `grand_total`, which is exactly what Polar charges.
+ */
+export class SelectShippingRateDto {
+  @IsString()
+  rateId!: string;
+}

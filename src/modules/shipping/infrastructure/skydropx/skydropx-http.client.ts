@@ -28,6 +28,25 @@ interface CachedToken {
   expiresAt: number;
 }
 
+/**
+ * Per-operation timeouts. Before these, every call used a bare `fetch` with no
+ * signal: if Skydropx hung, the checkout request hung with it, and the customer
+ * watched a spinner until their own browser gave up.
+ *
+ * They differ because what is at stake differs. Quoting sits in the checkout
+ * with someone watching, so it fails fast. Buying or cancelling a label is a
+ * request that may already have executed on their side — aborting early would
+ * leave us unsure whether a guide exists, which is worse than waiting.
+ */
+const TIMEOUTS = {
+  /** Authentication does nothing but authenticate. */
+  auth: 5_000,
+  /** In the checkout path; a human is looking at the screen. */
+  quote: 8_000,
+  /** Buys, cancels or reads a real label. Patience beats ambiguity. */
+  write: 15_000,
+} as const;
+
 @Injectable()
 export class SkydropxHttpClient implements SkydropxClient {
   private readonly logger = new Logger(SkydropxHttpClient.name);
@@ -60,15 +79,20 @@ export class SkydropxHttpClient implements SkydropxClient {
       );
     }
 
-    const res = await fetch(`${this.baseUrl}/api/v1/oauth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
+    const res = await this.fetchWithTimeout(
+      `${this.baseUrl}/api/v1/oauth/token`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'client_credentials',
+          client_id: clientId,
+          client_secret: clientSecret,
+        }),
+      },
+      TIMEOUTS.auth,
+      'POST /api/v1/oauth/token',
+    );
 
     if (!res.ok) {
       const text = await res.text();
@@ -92,21 +116,50 @@ export class SkydropxHttpClient implements SkydropxClient {
     return this.cachedToken.accessToken;
   }
 
+  /**
+   * `fetch` with a deadline, mapping an abort to the same 503 every other
+   * transport failure produces — a caller should not have to tell "no answer"
+   * apart from "answered too late". The upstream detail stays in the log.
+   */
+  private async fetchWithTimeout(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    label: string,
+  ): Promise<Response> {
+    try {
+      return await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      const name = error instanceof Error ? error.name : 'Unknown';
+      this.logger.error(`Skydropx ${label} failed after ${timeoutMs}ms: ${name}`);
+      throw new ServiceUnavailableException('Skydropx is not responding');
+    }
+  }
+
   private async request<T>(
     path: string,
     method: string,
     body?: unknown,
+    timeoutMs: number = TIMEOUTS.write,
   ): Promise<T> {
     const token = await this.getAccessToken();
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        Authorization: `Bearer ${token}`,
+    const res = await this.fetchWithTimeout(
+      `${this.baseUrl}${path}`,
+      {
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
       },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+      timeoutMs,
+      `${method} ${path}`,
+    );
 
     if (!res.ok) {
       const text = await res.text();
@@ -155,7 +208,10 @@ export class SkydropxHttpClient implements SkydropxClient {
       id?: string;
       data?: { id?: string };
       rates?: SkydropxRawRate[];
-    }>('/api/v1/quotations', 'POST', payload);
+      // The short timeout: this call runs inside the checkout, with someone
+      // watching. Every other operation buys or reads a real label and gets
+      // the patient one.
+    }>('/api/v1/quotations', 'POST', payload, TIMEOUTS.quote);
 
     const quotationId = String(json.id ?? json.data?.id ?? '');
     const rawRates = json.rates ?? [];

@@ -11,16 +11,12 @@ import { ApiExcludeController } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Public } from '../../../../shared/common/decorators/public.decorator';
 import { AppConfig } from '../../../../shared/config/configuration';
+import { ShippingWebhookService } from '../../application/services/shipping-webhook.service';
+import { SkydropxWebhookPayload } from '../../application/services/skydropx-webhook.payload';
 import {
-  ShippingWebhookService,
-  SkydropxWebhookPayload,
-} from '../../application/services/shipping-webhook.service';
-import {
-  isValidSkydropxSignature,
-  SKYDROPX_SIGNATURE_HEADER,
+  isValidSkydropxWebhookToken,
+  SKYDROPX_AUTH_HEADER,
 } from '../skydropx/skydropx-webhook.util';
-
-type RawBodyRequest = Request & { rawBody?: Buffer };
 
 @ApiExcludeController()
 @Controller({ path: 'shipping/webhooks/skydropx', version: '1' })
@@ -34,7 +30,7 @@ export class ShippingWebhookController {
   @Post()
   @HttpCode(200)
   async handle(
-    @Req() req: RawBodyRequest,
+    @Req() req: Request,
     @Headers() headers: Record<string, string | string[]>,
   ) {
     const secret = this.config.get('skydropx.webhookSecret', { infer: true });
@@ -42,11 +38,10 @@ export class ShippingWebhookController {
       throw new UnauthorizedException('Skydropx webhook secret not configured');
     }
 
-    const rawBody = req.rawBody ?? Buffer.from(JSON.stringify(req.body ?? {}));
-    const signature = this.headerValue(headers[SKYDROPX_SIGNATURE_HEADER]);
+    const authHeader = this.headerValue(headers[SKYDROPX_AUTH_HEADER]);
 
-    if (!isValidSkydropxSignature(rawBody, signature, secret)) {
-      throw new UnauthorizedException('Invalid Skydropx webhook signature');
+    if (!isValidSkydropxWebhookToken(authHeader, secret)) {
+      throw new UnauthorizedException('Invalid Skydropx webhook token');
     }
 
     await this.webhookService.handle(req.body as SkydropxWebhookPayload);

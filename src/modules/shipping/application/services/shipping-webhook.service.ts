@@ -1,26 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { QueryFailedError, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { ShipmentTrackingEventEntity } from '../../domain/entities/shipment-tracking-event.entity';
 import { ShipmentEntity } from '../../domain/entities/shipment.entity';
 import { ShippingWebhookEventEntity } from '../../domain/entities/shipping-webhook-event.entity';
-
-export type SkydropxWebhookPayload = {
-  type: string;
-  id?: string;
-  data: {
-    id?: string;
-    shipment_id?: string;
-    tracking_number?: string;
-    status?: string;
-    description?: string;
-    occurred_at?: string;
-  };
-};
+import { insertIfNew } from '../../../../shared/database/insert-if-new';
+import {
+  NormalizedSkydropxEvent,
+  normalizeSkydropxEvent,
+  SkydropxWebhookPayload,
+} from './skydropx-webhook.payload';
 
 // Mapea estados de Skydropx → shippingStatus del pedido.
 const ORDER_STATUS_MAP: Record<string, string> = {
@@ -57,33 +50,26 @@ export class ShippingWebhookService {
     private readonly events: EventEmitter2,
   ) {}
 
-  async handle(event: SkydropxWebhookPayload): Promise<void> {
-    const eventId = `${event.type}:${event.id ?? event.data.id ?? event.data.shipment_id ?? ''}`;
+  async handle(payload: SkydropxWebhookPayload): Promise<void> {
+    const event = normalizeSkydropxEvent(payload);
+    const eventId = event.eventId;
+    const rawPayload = JSON.parse(JSON.stringify(payload)) as Record<
+      string,
+      unknown
+    >;
 
-    try {
-      await this.webhookRepo.save(
-        this.webhookRepo.create({
-          skydropxEventId: eventId,
-          eventType: event.type,
-          payloadJson: JSON.parse(JSON.stringify(event)) as Record<
-            string,
-            unknown
-          >,
-        }),
-      );
-    } catch (e) {
-      if (
-        e instanceof QueryFailedError &&
-        (e as { code?: string }).code === '23505'
-      ) {
-        this.logger.debug(`Duplicate shipping webhook ${eventId}, skipping`);
-        return;
-      }
-      throw e;
+    const isNew = await insertIfNew(this.webhookRepo, {
+      skydropxEventId: eventId,
+      eventType: event.eventType,
+      payloadJson: rawPayload,
+    });
+    if (!isNew) {
+      this.logger.debug(`Duplicate shipping webhook ${eventId}, skipping`);
+      return;
     }
 
     try {
-      await this.applyTracking(event);
+      await this.applyTracking(event, rawPayload);
       await this.webhookRepo.update(
         { skydropxEventId: eventId },
         { processedAt: new Date() },
@@ -95,33 +81,39 @@ export class ShippingWebhookService {
   }
 
   private async findShipment(
-    event: SkydropxWebhookPayload,
+    event: NormalizedSkydropxEvent,
   ): Promise<ShipmentEntity | null> {
-    const skydropxId = event.data.shipment_id ?? event.data.id;
+    const skydropxId = event.shipmentId ?? event.resourceId;
     if (skydropxId) {
       const byId = await this.shipmentRepo.findOne({
-        where: { skydropxShipmentId: String(skydropxId) },
+        where: { skydropxShipmentId: skydropxId },
       });
       if (byId) return byId;
     }
-    if (event.data.tracking_number) {
+    if (event.trackingNumber) {
       return this.shipmentRepo.findOne({
-        where: { trackingNumber: event.data.tracking_number },
+        where: { trackingNumber: event.trackingNumber },
       });
     }
     return null;
   }
 
-  private async applyTracking(event: SkydropxWebhookPayload): Promise<void> {
+  private async applyTracking(
+    event: NormalizedSkydropxEvent,
+    rawPayload: Record<string, unknown>,
+  ): Promise<void> {
     const shipment = await this.findShipment(event);
     if (!shipment) {
+      // Skydropx also pushes non-shipment resources (orders synced from the
+      // storefront, for instance). Recording and dropping them keeps the
+      // webhook on 200 so it is not retried forever.
       this.logger.warn(
-        `Webhook ${event.type}: shipment not found for ${JSON.stringify(event.data)}`,
+        `Webhook ${event.eventType} (${event.eventId}): no shipment matched`,
       );
       return;
     }
 
-    const status = event.data.status;
+    const status = event.status;
     if (status) {
       shipment.status = status;
       await this.shipmentRepo.save(shipment);
@@ -160,11 +152,9 @@ export class ShippingWebhookService {
       this.trackingRepo.create({
         shipmentId: shipment.id,
         status: status ?? 'unknown',
-        description: event.data.description ?? null,
-        occurredAt: event.data.occurred_at
-          ? new Date(event.data.occurred_at)
-          : new Date(),
-        rawJson: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+        description: event.description ?? null,
+        occurredAt: event.occurredAt ? new Date(event.occurredAt) : new Date(),
+        rawJson: rawPayload,
       }),
     );
   }

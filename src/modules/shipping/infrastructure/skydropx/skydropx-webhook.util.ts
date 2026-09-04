@@ -1,29 +1,32 @@
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 
-// Header donde Skydropx envía la firma del webhook.
-// NOTA: confirmar el nombre exacto en la sección Webhooks de los api-docs.
-export const SKYDROPX_SIGNATURE_HEADER = 'x-skydropx-signature';
+// Skydropx no firma el cuerpo del webhook. En el panel se elige
+// "Método de autenticación: Token" y ese token viaja tal cual en el header
+// Authorization de cada entrega.
+export const SKYDROPX_AUTH_HEADER = 'authorization';
+
+const SCHEME_PREFIX = /^(?:bearer|token)\s+/i;
 
 /**
- * Valida la firma HMAC-SHA256 del webhook de Skydropx sobre el cuerpo crudo.
- * Devuelve true si la firma coincide con el secret configurado.
+ * Valida el token estático que Skydropx envía en cada entrega del webhook.
+ * Acepta el token pelado o precedido por "Bearer"/"Token", porque el esquema
+ * puede venir escrito en el panel o agregado por Skydropx.
  */
-export function isValidSkydropxSignature(
-  rawBody: Buffer,
-  signature: string | undefined,
-  secret: string,
+export function isValidSkydropxWebhookToken(
+  header: string | undefined,
+  expectedToken: string,
 ): boolean {
-  if (!signature) return false;
+  const received = normalize(header);
+  const expected = normalize(expectedToken);
+  if (!received || !expected) return false;
 
-  const expected = createHmac('sha256', secret).update(rawBody).digest('hex');
-  // La firma puede venir como "sha256=<hex>" o solo "<hex>".
-  const received = signature.includes('=')
-    ? signature.split('=').pop()!
-    : signature;
+  const receivedBuf = Buffer.from(received, 'utf8');
+  const expectedBuf = Buffer.from(expected, 'utf8');
+  if (receivedBuf.length !== expectedBuf.length) return false;
 
-  const expectedBuf = Buffer.from(expected, 'hex');
-  const receivedBuf = Buffer.from(received, 'hex');
-  if (expectedBuf.length !== receivedBuf.length) return false;
+  return timingSafeEqual(receivedBuf, expectedBuf);
+}
 
-  return timingSafeEqual(expectedBuf, receivedBuf);
+function normalize(value: string | undefined): string {
+  return (value ?? '').trim().replace(SCHEME_PREFIX, '');
 }
