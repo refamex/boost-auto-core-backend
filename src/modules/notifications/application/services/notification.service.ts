@@ -104,6 +104,22 @@ export class NotificationService {
     });
   }
 
+  /**
+   * Restates the deep link from the current route table.
+   *
+   * The stored `link` is a snapshot of the storefront routes as they stood the
+   * day the row was written, so every notification created before the routes
+   * were renamed carries a dead path — that is how a customer clicking their
+   * own order notification reached a 404. Recomputing on the way out means a
+   * future route rename only needs `linkFor` updated, never a data migration.
+   *
+   * The mutated entity is never saved back; it exists only to be serialised.
+   */
+  private withCurrentLink(n: NotificationEntity): NotificationEntity {
+    n.link = linkFor(n.eventKey, n.entityId);
+    return n;
+  }
+
   async list(
     recipientUserId: string,
     query: NotificationQueryDto,
@@ -117,7 +133,11 @@ export class NotificationService {
       skip: query.skip,
       take: query.limit,
     });
-    return paginated(items, total, query);
+    return paginated(
+      items.map((item) => this.withCurrentLink(item)),
+      total,
+      query,
+    );
   }
 
   unreadCount(recipientUserId: string): Promise<number> {
@@ -137,7 +157,8 @@ export class NotificationService {
       found.readAt = new Date();
       await this.repo.save(found);
     }
-    return found;
+    // After the save, so the recomputed link is never written back to the row.
+    return this.withCurrentLink(found);
   }
 
   async markAllRead(recipientUserId: string): Promise<{ updated: number }> {

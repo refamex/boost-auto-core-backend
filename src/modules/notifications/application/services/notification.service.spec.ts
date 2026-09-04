@@ -86,6 +86,21 @@ describe('NotificationService', () => {
     contact: { email: 'cliente@example.com' },
   };
 
+  /**
+   * A row as it sits in the table today: the `link` column still holds the
+   * Spanish path that was stamped on it before the storefront routes were
+   * matched. Reads must not hand this back.
+   */
+  const storedRow = {
+    id: 'notif-1',
+    recipientUserId: RECIPIENT,
+    eventKey: 'payment.received',
+    entityType: 'order',
+    entityId: ORDER_ID,
+    link: `/cuenta/pedido/${ORDER_ID}`,
+    readAt: null,
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     repo.findOne.mockResolvedValue(null);
@@ -119,7 +134,7 @@ describe('NotificationService', () => {
       expect(notificationTxRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           dedupeKey: `payment.received:${ORDER_ID}:${RECIPIENT}`,
-          link: `/cuenta/pedido/${ORDER_ID}`,
+          link: `/orders/${ORDER_ID}`,
         }),
       );
     });
@@ -198,7 +213,7 @@ describe('NotificationService', () => {
     });
 
     it('marks a notification read', async () => {
-      repo.findOne.mockResolvedValue({ id: 'notif-1', readAt: null });
+      repo.findOne.mockResolvedValue({ ...storedRow, readAt: null });
       const result = await service.markRead('notif-1', RECIPIENT);
       expect(result.readAt).toBeInstanceOf(Date);
       expect(repo.save).toHaveBeenCalled();
@@ -206,7 +221,7 @@ describe('NotificationService', () => {
 
     it('does not move the read timestamp on a second read', async () => {
       const alreadyRead = new Date('2026-01-01T00:00:00.000Z');
-      repo.findOne.mockResolvedValue({ id: 'notif-1', readAt: alreadyRead });
+      repo.findOne.mockResolvedValue({ ...storedRow, readAt: alreadyRead });
       const result = await service.markRead('notif-1', RECIPIENT);
       expect(result.readAt).toBe(alreadyRead);
       expect(repo.save).not.toHaveBeenCalled();
@@ -228,6 +243,47 @@ describe('NotificationService', () => {
       const result = await service.markAllRead(RECIPIENT);
       expect(result).toEqual({ updated: 3 });
       expect(updateCriteria()).toMatchObject({ recipientUserId: RECIPIENT });
+    });
+
+    // The reported bug: the stored link is a snapshot of the routes as they
+    // were the day the row was written, and clicking one answered 404.
+    it('restates a stale stored link from the current routes', async () => {
+      repo.findAndCount.mockResolvedValueOnce([[{ ...storedRow }], 1]);
+      const result = await service.list(RECIPIENT, {
+        page: 1,
+        limit: 25,
+        skip: 0,
+      });
+      expect(result.items[0].link).toBe(`/orders/${ORDER_ID}`);
+    });
+
+    it('restates the link when marking one read too', async () => {
+      repo.findOne.mockResolvedValue({ ...storedRow });
+      const result = await service.markRead('notif-1', RECIPIENT);
+      expect(result.link).toBe(`/orders/${ORDER_ID}`);
+    });
+
+    it('does not write the recomputed link back to the row', async () => {
+      // The entity is mutated only to be serialised. Persisting it here would
+      // turn every read into a write.
+      repo.findOne.mockResolvedValue({ ...storedRow, readAt: new Date() });
+      await service.markRead('notif-1', RECIPIENT);
+      expect(repo.save).not.toHaveBeenCalled();
+    });
+
+    it('survives a row whose event key is no longer in the catalogue', async () => {
+      // `event_key` is a plain varchar. One unreadable legacy row must lose its
+      // own link, not take the whole feed down with a 500.
+      repo.findAndCount.mockResolvedValueOnce([
+        [{ ...storedRow, eventKey: 'order.retired_event' }],
+        1,
+      ]);
+      const result = await service.list(RECIPIENT, {
+        page: 1,
+        limit: 25,
+        skip: 0,
+      });
+      expect(result.items[0].link).toBeNull();
     });
   });
 });
