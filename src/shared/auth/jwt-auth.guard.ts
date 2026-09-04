@@ -64,7 +64,24 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     const salesRepId =
       typeof salesRepHeader === 'string' ? salesRepHeader.trim() : undefined;
 
-    req.user = { id: userId, roles, salesRepId: salesRepId || undefined };
+    // Same reasoning for the two claims the order gate reads. Without them the
+    // customer-profile block is unreachable in dev and in e2e, and the only way
+    // to exercise the endpoint locally would be to hand yourself a staff role —
+    // which skips the very check under test.
+    const employeeHeader = req.headers['x-employee-id'];
+    const employeeId =
+      typeof employeeHeader === 'string' ? employeeHeader.trim() : undefined;
+
+    // Opt-in, matching the claim: absent means incomplete, which fails closed.
+    const profileComplete = req.headers['x-profile-complete'] === 'true';
+
+    req.user = {
+      id: userId,
+      roles,
+      salesRepId: salesRepId || undefined,
+      employeeId: employeeId || undefined,
+      profileComplete,
+    };
     return true;
   }
 }

@@ -43,14 +43,30 @@ export const ROLE_PERMISSIONS: Record<string, readonly string[]> = {
   ],
   /**
    * `customer` is a macro identity role issued by autoboost-backend-auth.
-   * Deliberately two strings (F6/F11): everything else a customer reaches is
-   * either ungated-and-ownership-scoped (order reads, invoice reads) or
-   * staff-only. Adding a third string here widens the entire slice.
+   * The checkout write permission is safe only because Polar checkout routes
+   * scope each order to the authenticated customer before creating or reading
+   * a checkout. Other customer reads are ungated and ownership-scoped, while
+   * operational writes remain staff-only.
    */
   customer: [
     'orders:create', // F1/F6 — POST /v1/orders ONLY. NOT orders:write (5 unscoped mutations, Defect A).
     'shipping:read', // F9 — quote + track. NOT shipping:write (buys/voids real Skydropx labels).
+    'payments:write', // Customer-owned Polar checkout only; service enforces order ownership.
   ],
+  /**
+   * `sales_rep` opens the doors; it does not decide what is behind them.
+   *
+   * Scoping to the rep's own portfolio already happens further in, from
+   * `user.salesRepId` — see `customer-visibility.ts` and `quote-visibility.ts`,
+   * which never consult a role code for that. So these four strings are only
+   * the route gates on `customer.controller.ts` and `quote.controller.ts`; a
+   * rep still sees exactly the customers and quotes it owns.
+   *
+   * Deliberately WITHOUT `customers:admin` and `quotes:admin`: both are the
+   * signals those visibility modules read to bypass ownership scoping
+   * entirely, which is the one thing a rep must never do.
+   */
+  sales_rep: ['customers:read', 'customers:write', 'quotes:read', 'quotes:write'],
 };
 
 /** Expands a caller's macro roles into their full granted-permission set. */
