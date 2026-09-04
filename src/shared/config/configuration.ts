@@ -85,6 +85,20 @@ export interface TaxConfig {
   rate: number;
 }
 
+/**
+ * Subida directa a S3. `enabled: false` deja los demas campos vacios a
+ * proposito: el cliente S3 se construye perezosamente y responde 503 antes de
+ * mirarlos, asi que un entorno local sin bucket arranca igual.
+ */
+export interface StorageConfig {
+  enabled: boolean;
+  region: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  bucket: string;
+  publicBaseUrl: string;
+}
+
 export interface AppConfig {
   env: 'development' | 'test' | 'production';
   port: number;
@@ -110,6 +124,7 @@ export interface AppConfig {
   inventory: InventoryConfig;
   roughCountry: RoughCountryConfig;
   notifications: NotificationsConfig;
+  storage: StorageConfig;
 }
 
 const optionalInt = (raw?: string): number | undefined => {
@@ -193,6 +208,20 @@ export default (): AppConfig => ({
       process.env.ROUGH_COUNTRY_RETRY_BASE_DELAY_MS ?? '1000',
       10,
     ),
+  },
+  /**
+   * Subida directa a S3 por URL prefirmada. Apagado por defecto: en local no
+   * hay credenciales de AWS, y negarse a arrancar por una funcion que nadie
+   * esta ejercitando obligaria a todo el mundo a configurar un bucket para
+   * trabajar en el catalogo.
+   */
+  storage: {
+    enabled: process.env.STORAGE_ENABLED === 'true',
+    region: process.env.AWS_REGION ?? '',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY ?? '',
+    bucket: process.env.S3_BUCKET ?? '',
+    publicBaseUrl: process.env.S3_PUBLIC_BASE_URL ?? '',
   },
   notifications: {
     emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',
