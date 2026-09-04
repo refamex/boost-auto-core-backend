@@ -76,6 +76,75 @@ export class InvoiceEntity {
   @Column({ type: 'varchar', length: 10, default: 'MXN' })
   currency!: string;
 
+  // --- CFDI 4.0. Todas nullable: ninguna factura existente fue timbrada, y
+  //     rellenarlas inventaria un hecho fiscal. ---
+  @Column({ type: 'varchar', length: 10, name: 'cfdi_version', nullable: true })
+  cfdiVersion?: string | null;
+
+  @Column({ type: 'varchar', length: 5, name: 'tipo_comprobante', nullable: true })
+  tipoComprobante?: string | null;
+
+  @Column({ type: 'varchar', length: 25, nullable: true })
+  serie?: string | null;
+
+  @Column({ type: 'varchar', length: 40, nullable: true })
+  folio?: string | null;
+
+  /** El folio fiscal. Unico en todo el SAT; unico tambien en esta tabla. */
+  @Column({ type: 'uuid', name: 'uuid_fiscal', nullable: true })
+  uuidFiscal?: string | null;
+
+  @Column({ type: 'timestamptz', name: 'fecha_timbrado', nullable: true })
+  fechaTimbrado?: Date | null;
+
+  @Column({ type: 'text', name: 'sello_cfd', nullable: true })
+  selloCfd?: string | null;
+
+  @Column({ type: 'text', name: 'sello_sat', nullable: true })
+  selloSat?: string | null;
+
+  @Column({ type: 'varchar', length: 20, name: 'no_certificado_emisor', nullable: true })
+  noCertificadoEmisor?: string | null;
+
+  @Column({ type: 'varchar', length: 20, name: 'no_certificado_sat', nullable: true })
+  noCertificadoSat?: string | null;
+
+  @Column({ type: 'text', name: 'cadena_original_sat', nullable: true })
+  cadenaOriginalSat?: string | null;
+
+  @Column({ type: 'varchar', length: 3, name: 'forma_pago', nullable: true })
+  formaPago?: string | null;
+
+  @Column({ type: 'varchar', length: 6, name: 'metodo_pago', nullable: true })
+  metodoPago?: string | null;
+
+  @Column({ type: 'varchar', length: 5, name: 'uso_cfdi', nullable: true })
+  usoCfdi?: string | null;
+
+  @Column({ type: 'varchar', length: 5, name: 'regimen_fiscal_emisor', nullable: true })
+  regimenFiscalEmisor?: string | null;
+
+  @Column({ type: 'varchar', length: 5, name: 'regimen_fiscal_receptor', nullable: true })
+  regimenFiscalReceptor?: string | null;
+
+  /** CP del domicilio fiscal del receptor. Obligatorio en 4.0 y no existia. */
+  @Column({ type: 'varchar', length: 10, name: 'domicilio_fiscal_receptor', nullable: true })
+  domicilioFiscalReceptor?: string | null;
+
+  // --- Cancelacion. El SAT no borra: sustituye. ---
+  @Column({ type: 'varchar', length: 30, name: 'cancel_status', nullable: true })
+  cancelStatus?: string | null;
+
+  /** Clave del catalogo c_MotivoCancelacion. `01` exige `uuidSustitucion`. */
+  @Column({ type: 'varchar', length: 3, name: 'cancel_motivo', nullable: true })
+  cancelMotivo?: string | null;
+
+  @Column({ type: 'uuid', name: 'uuid_sustitucion', nullable: true })
+  uuidSustitucion?: string | null;
+
+  @Column({ type: 'timestamptz', name: 'cancelled_at', nullable: true })
+  cancelledAt?: Date | null;
+
   @Column({ type: 'varchar', length: 50, name: 'sat_status', nullable: true })
   satStatus?: string | null;
 

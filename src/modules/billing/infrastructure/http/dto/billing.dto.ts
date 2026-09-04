@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -95,4 +96,22 @@ export class InvoiceQueryDto {
   @IsUUID()
   @IsOptional()
   orderId?: string;
+}
+
+/**
+ * Cancelacion ante el SAT.
+ *
+ * `motivo` es la clave del catalogo c_MotivoCancelacion. El SAT no borra
+ * comprobantes: los sustituye, y el motivo `01` obliga a decir cual comprobante
+ * reemplaza a este.
+ */
+export class CancelInvoiceDto {
+  @ApiProperty({ enum: ['01', '02', '03', '04'] })
+  @IsIn(['01', '02', '03', '04'])
+  motivo!: '01' | '02' | '03' | '04';
+
+  @ApiPropertyOptional({ description: 'Obligatorio cuando motivo es 01.' })
+  @IsOptional()
+  @IsUUID()
+  uuidSustitucion?: string;
 }

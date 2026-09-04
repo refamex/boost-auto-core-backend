@@ -14,7 +14,9 @@ import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface
 import { CurrentUser } from '../../../../shared/common/decorators/current-user.decorator';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { InvoiceService } from '../../application/services/invoice.service';
+import { StampingService } from '../../application/services/stamping.service';
 import {
+  CancelInvoiceDto,
   CreateInvoiceDocumentDto,
   CreateInvoiceDto,
   InvoiceQueryDto,
@@ -25,7 +27,10 @@ import {
 @ApiBearerAuth()
 @Controller({ path: 'invoices', version: '1' })
 export class InvoiceController {
-  constructor(private readonly svc: InvoiceService) {}
+  constructor(
+    private readonly svc: InvoiceService,
+    private readonly stamping: StampingService,
+  ) {}
 
   @Get()
   list(
@@ -57,6 +62,27 @@ export class InvoiceController {
   @HttpCode(204)
   async remove(@Param('id') id: string) {
     await this.svc.remove(id);
+  }
+
+  /**
+   * Timbra la factura ante el SAT.
+   *
+   * Hoy responde 503 con el motivo: no hay PAC contratado. Es deliberado — un
+   * UUID inventado se guarda, se imprime y se le entrega a alguien que cree
+   * tener una factura valida.
+   */
+  @Post(':id/stamp')
+  @Roles('billing:write')
+  @HttpCode(200)
+  stamp(@Param('id') id: string) {
+    return this.stamping.stamp(id);
+  }
+
+  @Post(':id/cancel')
+  @Roles('billing:write')
+  @HttpCode(200)
+  cancel(@Param('id') id: string, @Body() dto: CancelInvoiceDto) {
+    return this.stamping.cancel(id, dto);
   }
 
   @Get(':id/documents')
