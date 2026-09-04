@@ -33,13 +33,16 @@ import { OrderPaymentEntity } from '../../domain/entities/order-payment.entity';
 import { OrderStatusEventEntity } from '../../domain/entities/order-status-event.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
 import {
+  orderGrandTotal,
   priceLine,
   quotedPriceMatches,
   round2,
 } from '../../domain/order-pricing';
+import { ProfileIncompleteError } from '../../domain/order-errors';
 import {
   bindCreate,
   buildWhere,
+  isStaff,
   OrderCreateBinding,
   tierOf,
 } from '../../domain/order-visibility';
@@ -183,6 +186,28 @@ export class OrderService {
         'customerId must match the authenticated customer',
       );
     }
+
+    /**
+     * A shopper finishes setting up their account before they can buy.
+     *
+     * Read from the token, not from a lookup: auth owns the customer profile
+     * and mints `profile_complete` alongside the identity claims this service
+     * already trusts. Asking auth over HTTP here would put a second service in
+     * the path of every order for a fact the token already carries.
+     *
+     * IN `create()` AND NOT IN `persist()`, deliberately. `createInternal()` —
+     * a rep converting an approved quote into an order — reaches `persist()`
+     * too, and that order belongs to a customer who may be a prospect with no
+     * account at all. Gating there would break the B2B path this check has
+     * nothing to do with.
+     *
+     * Staff are exempt: an employee is not a customer and has no fiscal profile
+     * to fill in.
+     */
+    if (!isStaff(actor) && !actor.profileComplete) {
+      throw new ProfileIncompleteError();
+    }
+
     return this.persist(dto, bound, 'server', actor.email, actor);
   }
 
@@ -269,7 +294,10 @@ export class OrderService {
       items,
       subtotal,
       taxTotal,
-      grandTotal: round2(subtotal + taxTotal),
+      // The preview and the order it becomes must agree, so both go through the
+      // same function. Freight is absent here on purpose: it is unknowable
+      // before an address and an accepted rate exist.
+      grandTotal: orderGrandTotal({ subtotal, taxTotal }),
     };
   }
 
@@ -319,9 +347,20 @@ export class OrderService {
           shipToName: dto.shipToName,
           shipToPhone: dto.shipToPhone,
           shipToEmail: dto.shipToEmail ?? contactEmail,
+          shipToCompany: dto.shipToCompany,
+          shipToStreet1: dto.shipToStreet1,
+          shipToPostalCode: dto.shipToPostalCode,
+          shipToAreaLevel1: dto.shipToAreaLevel1,
+          shipToAreaLevel2: dto.shipToAreaLevel2,
+          shipToAreaLevel3: dto.shipToAreaLevel3,
+          shipToCountryCode: dto.shipToCountryCode ?? 'MX',
           subtotal,
           taxTotal,
-          grandTotal: round2(subtotal + taxTotal),
+          // Freight is not known yet and must not be guessed. The order becomes
+          // chargeable only once a rate is accepted, which is what stamps
+          // `shipping_quoted_at` and recomputes this total through
+          // `orderGrandTotal`.
+          grandTotal: orderGrandTotal({ subtotal, taxTotal }),
           discountTotal: 0,
           shippingTotal: 0,
         }),

@@ -230,6 +230,54 @@ export class OrderEntity {
   })
   parcelHeight?: number | null;
 
+  // --- La tarifa aceptada. La escribe SÓLO el servidor, con un importe que
+  //     Skydropx devolvió; el cliente manda un `rateId`, nunca un precio. ---
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'shipping_quotation_id',
+    nullable: true,
+  })
+  shippingQuotationId?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'shipping_rate_id',
+    nullable: true,
+  })
+  shippingRateId?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'shipping_carrier_name',
+    nullable: true,
+  })
+  shippingCarrierName?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 120,
+    name: 'shipping_service_level',
+    nullable: true,
+  })
+  shippingServiceLevel?: string | null;
+
+  /**
+   * NULL = nobody ever accepted a rate on this order. `PolarCheckoutService`
+   * refuses to charge in that state, which is what closes the path of skipping
+   * the quote and posting straight to the checkout endpoint.
+   */
+  @Column({ type: 'timestamp', name: 'shipping_quoted_at', nullable: true })
+  shippingQuotedAt?: Date | null;
+
+  /** What the customer was offered. Kept so selection resolves a rate id
+   *  without re-quoting — a second call returns different ids, and possibly a
+   *  different price. */
+  @Column({ type: 'jsonb', name: 'shipping_rates_json', nullable: true })
+  shippingRatesJson?: unknown | null;
+
   @Column({ type: 'timestamp', name: 'placed_at', default: () => 'NOW()' })
   placedAt!: Date;
 

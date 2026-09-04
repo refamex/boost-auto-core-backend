@@ -1,5 +1,10 @@
 import { AuthenticatedUser } from '../../../shared/auth/jwt-payload.interface';
-import { bindCreate, buildWhere, tierOf } from './order-visibility';
+import {
+  bindCreate,
+  buildWhere,
+  isStaff,
+  tierOf,
+} from './order-visibility';
 
 const admin: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
 const rep: AuthenticatedUser = {
@@ -132,5 +137,41 @@ describe('bindCreate', () => {
     expect(
       bindCreate(customer, { customerId: 'customer-2', status: 'confirmed' }),
     ).toBeNull();
+  });
+});
+
+/**
+ * Who is exempt from the customer-profile gate.
+ *
+ * `employee_id` is the honest signal: auth mints it only when the person has a
+ * row in `identity.employees`. Before this, core had the claim mapped onto
+ * `AuthenticatedUser` and **not one file read it**.
+ */
+describe('isStaff', () => {
+  it('recognises an employee who is neither admin nor rep', () => {
+    // The case that motivates reading the claim at all: warehouse and office
+    // staff hold no orders:admin and no salesRepId, so `tierOf` calls them
+    // customers and the profile gate would block them.
+    expect(
+      isStaff({ id: 'emp-1', roles: [], employeeId: 'employee-9' }),
+    ).toBe(true);
+  });
+
+  it('recognises an admin, even on a token minted before the claim existed', () => {
+    expect(isStaff(admin)).toBe(true);
+  });
+
+  it('recognises a rep from the salesRepId claim alone', () => {
+    expect(isStaff(rep)).toBe(true);
+  });
+
+  it('calls a plain shopper a customer', () => {
+    expect(isStaff(customer)).toBe(false);
+  });
+
+  it('does not treat an empty employeeId as staff', () => {
+    // A blank string is what a misconfigured mock header produces, and it must
+    // not open the gate.
+    expect(isStaff({ id: 'u', roles: [], employeeId: '' })).toBe(false);
   });
 });

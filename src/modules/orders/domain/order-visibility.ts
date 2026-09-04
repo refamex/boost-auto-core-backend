@@ -39,6 +39,22 @@ export function tierOf(user: AuthenticatedUser): OrderActorTier {
 }
 
 /**
+ * Whether the caller works here.
+ *
+ * `employee_id` is the honest answer: auth mints it iff the person has a row in
+ * `identity.employees`, and being staff is a fact about identity rather than a
+ * permission. The role check is kept alongside it because `tierOf` already
+ * treats admins and reps as staff everywhere else, and an operator whose token
+ * predates the `employee_id` claim must not suddenly be gated as a shopper.
+ *
+ * Exists so the customer-profile gate has ONE definition to consult instead of
+ * a condition rewritten at each call site.
+ */
+export function isStaff(user: AuthenticatedUser): boolean {
+  return Boolean(user.employeeId) || tierOf(user) !== 'customer';
+}
+
+/**
  * Returns `null` when the requested filter can never match anything the
  * caller is allowed to see — the caller gets an empty page, not a 403,
  * because refusing would confirm that matching orders exist.
