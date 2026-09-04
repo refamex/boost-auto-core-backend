@@ -24,9 +24,22 @@ export class QuoteEntity {
   /**
    * Both actors live in autoboost-backend-auth (identity.customer_profiles,
    * identity.sales_reps), so these are bare UUIDs with no foreign key.
+   *
+   * WHICH ACCOUNT can see this quote. NULL while the customer has no platform
+   * account: the quote exists and belongs to its rep, it simply has no reader
+   * yet. `CustomerProfileService.link()` fills it in when the customer links
+   * one, and the quote appears in their `/v1/quotes/me` from then on.
    */
-  @Column({ type: 'uuid', name: 'customer_id' })
-  customerId!: string;
+  @Column({ type: 'uuid', name: 'customer_id', nullable: true })
+  customerId?: string | null;
+
+  /**
+   * WHO the quote is for — a row in `customers.customer_profile`, which exists
+   * from the moment the rep creates the customer, prospect or not. This is the
+   * durable link; `customerId` is the one that may still be missing.
+   */
+  @Column({ type: 'uuid', name: 'customer_profile_id', nullable: true })
+  customerProfileId?: string | null;
 
   @Column({ type: 'uuid', name: 'sales_rep_id', nullable: true })
   salesRepId?: string | null;
