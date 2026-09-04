@@ -8,11 +8,39 @@ import { PolarCheckoutEntity } from '../../domain/entities/polar-checkout.entity
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { OrderPaymentEntity } from '../../../orders/domain/entities/order-payment.entity';
 
+type InsertQbMock = {
+  insert: () => InsertQbMock;
+  into: () => InsertQbMock;
+  values: (v: unknown) => InsertQbMock;
+  orIgnore: () => InsertQbMock;
+  returning: () => InsertQbMock;
+  updateEntity: () => InsertQbMock;
+  execute: jest.Mock;
+};
+
 describe('PolarWebhookService', () => {
+  // insertIfNew() writes through the query builder: ON CONFLICT DO NOTHING
+  // returns the new row, or nothing at all when the event already landed.
+  const insertExecute = jest.fn();
+  const insertValues = jest.fn();
+  const insertQb: InsertQbMock = {
+    insert: () => insertQb,
+    into: () => insertQb,
+    values: (v: unknown) => {
+      insertValues(v);
+      return insertQb;
+    },
+    orIgnore: () => insertQb,
+    returning: () => insertQb,
+    updateEntity: () => insertQb,
+    execute: insertExecute,
+  };
+
   const webhookRepo = {
-    save: jest.fn().mockResolvedValue({}),
+    target: WebhookEventEntity,
+    metadata: { primaryColumns: [{ databaseName: 'id' }] },
+    createQueryBuilder: jest.fn(() => insertQb),
     update: jest.fn().mockResolvedValue({}),
-    create: jest.fn((x: unknown) => x),
   };
 
   const orderRepo = {
@@ -76,6 +104,7 @@ describe('PolarWebhookService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    insertExecute.mockResolvedValue({ raw: [{ id: 'webhook-row' }] });
     const moduleRef = await Test.createTestingModule({
       providers: [
         PolarWebhookService,
@@ -111,11 +140,27 @@ describe('PolarWebhookService', () => {
       },
     });
 
-    expect(webhookRepo.save).toHaveBeenCalled();
+    expect(insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ polarEventId: 'order.paid:polar-order-1' }),
+    );
     expect(dataSource.transaction).toHaveBeenCalled();
     expect(webhookRepo.update).toHaveBeenCalledWith(
       { polarEventId: 'order.paid:polar-order-1' },
       expect.objectContaining({ processedAt: expect.any(Date) as unknown }),
     );
+  });
+
+  // The unique index is the idempotency guard; ON CONFLICT DO NOTHING makes it
+  // return an empty result instead of raising 23505 into the logs.
+  it('skips an event that was already recorded, without touching the order', async () => {
+    insertExecute.mockResolvedValue({ raw: [] });
+
+    await service.handle({
+      type: 'order.paid',
+      data: { id: 'polar-order-1', metadata: { orderId: 'order-uuid' } },
+    });
+
+    expect(dataSource.transaction).not.toHaveBeenCalled();
+    expect(webhookRepo.update).not.toHaveBeenCalled();
   });
 });
