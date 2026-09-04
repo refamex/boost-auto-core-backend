@@ -1,5 +1,7 @@
 import { Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { CurrentUser } from '../../../../shared/common/decorators/current-user.decorator';
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { PolarCheckoutService } from '../../application/services/polar-checkout.service';
 
@@ -11,12 +13,18 @@ export class OrderPolarCheckoutController {
 
   @Post(':orderId/polar-checkout')
   @Roles('payments:write')
-  create(@Param('orderId') orderId: string) {
-    return this.polarCheckout.createForOrder(orderId);
+  create(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.polarCheckout.createForOrder(orderId, user);
   }
 
   @Get(':orderId/polar-checkout')
-  latest(@Param('orderId') orderId: string) {
-    return this.polarCheckout.findLatestByOrder(orderId);
+  latest(
+    @Param('orderId') orderId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.polarCheckout.findLatestByOrder(orderId, user);
   }
 }

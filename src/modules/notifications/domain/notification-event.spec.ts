@@ -103,13 +103,32 @@ describe('dedupeKeyFor', () => {
 
 describe('linkFor', () => {
   it('points invoice notifications at the invoice', () => {
-    expect(linkFor('invoice.available', 'inv-1')).toBe(
-      '/cuenta/facturas/inv-1',
-    );
+    expect(linkFor('invoice.available', 'inv-1')).toBe('/account/invoices');
   });
 
   it('points order notifications at the order', () => {
-    expect(linkFor('shipment.delivered', 'ord-1')).toBe('/cuenta/pedido/ord-1');
-    expect(linkFor('payment.received', 'ord-1')).toBe('/cuenta/pedido/ord-1');
+    expect(linkFor('shipment.delivered', 'ord-1')).toBe('/orders/ord-1');
+    expect(linkFor('payment.received', 'ord-1')).toBe('/orders/ord-1');
+  });
+
+  it('gives system alerts no link at all', () => {
+    // Their entity id is the feed's job type, not a document the customer can
+    // open, so `/orders/rough-country-stock` would be one more 404.
+    expect(
+      linkFor('system.stock_sync_failed', 'rough-country-stock'),
+    ).toBeNull();
+    expect(
+      linkFor('system.stock_sync_config_error', 'rough-country-stock'),
+    ).toBeNull();
+  });
+
+  it('never points at a Spanish path the storefront does not serve', () => {
+    // The original defect: every stored link read `/cuenta/...`, and no route
+    // in boost-auto-client-app has ever answered one.
+    for (const key of NOTIFICATION_EVENT_KEYS) {
+      const link = linkFor(key, 'entity-1');
+      // Null is a legitimate answer (system alerts); a `/cuenta/` path is not.
+      expect(link === null || !link.startsWith('/cuenta/')).toBe(true);
+    }
   });
 });

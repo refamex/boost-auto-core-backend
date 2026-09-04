@@ -132,16 +132,39 @@ export const NOTIFICATION_TEMPLATES: Record<
   },
 };
 
-/** Deep link for the feed row. The customer UI has no slot for this yet, but the
- * API carries it so the rows can become clickable without a contract change. */
+/**
+ * Deep link for the feed row.
+ *
+ * These used to read `/cuenta/pedido/:id` and `/cuenta/facturas/:id` — Spanish
+ * paths that no route in the storefront has ever served, so every notification
+ * a customer clicked answered 404. The app routes are English (`/orders`,
+ * `/account/invoices`); this now matches them.
+ *
+ * The paths belong to `boost-auto-client-app`. This is the single place that
+ * knows them: `NotificationService` recomputes the link on every read rather
+ * than trusting the value persisted with the row, so renaming a route there
+ * needs this function updated and nothing else.
+ */
 export function linkFor(
   eventKey: NotificationEventKey,
   entityId: string,
-): string {
-  return NOTIFICATION_TEMPLATES[eventKey].category === 'invoice' &&
-    eventKey === 'invoice.available'
-    ? `/cuenta/facturas/${entityId}`
-    : `/cuenta/pedido/${entityId}`;
+): string | null {
+  // Unknown key falls through to no link rather than throwing. The type says
+  // this cannot happen, but `event_key` is a plain varchar and this function is
+  // now called on rows read back from the table: one row written by an older
+  // version, under a key since dropped from the catalogue, would otherwise take
+  // down the whole feed instead of losing its own link.
+  const template = NOTIFICATION_TEMPLATES[eventKey] as
+    | NotificationTemplate
+    | undefined;
+  if (!template) return null;
+  // A system alert references no customer document: its entityId is the feed's
+  // job type, not an order, so `/orders/${entityId}` would be another 404.
+  // Null is representable end to end — the column is nullable and the
+  // storefront's notification handler only navigates when a link is present.
+  if (template.category === 'system') return null;
+  if (eventKey === 'invoice.available') return `/account/invoices`;
+  return `/orders/${entityId}`;
 }
 
 export function renderNotification(

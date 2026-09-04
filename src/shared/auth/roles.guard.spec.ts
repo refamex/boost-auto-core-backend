@@ -61,10 +61,11 @@ describe('RolesGuard — role expansion, then `some` (D1, D4/D7)', () => {
 });
 
 describe('role-permissions map — customer row and admin growth (F6, F11)', () => {
-  it('customer expands to exactly orders:create and shipping:read', () => {
+  it('customer expands to exactly orders:create, shipping:read, and payments:write', () => {
     expect(ROLE_PERMISSIONS.customer).toEqual([
       'orders:create',
       'shipping:read',
+      'payments:write',
     ]);
   });
 
@@ -77,6 +78,7 @@ describe('role-permissions map — customer row and admin growth (F6, F11)', () 
 
   it('customer is NOT granted orders:write, shipping:write, billing:write, or billing:admin', () => {
     const granted = expand(['customer']);
+    expect(granted.has('payments:write')).toBe(true);
     expect(granted.has('orders:write')).toBe(false);
     expect(granted.has('shipping:write')).toBe(false);
     expect(granted.has('billing:write')).toBe(false);

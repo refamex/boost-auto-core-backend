@@ -5,7 +5,11 @@ import { CurrentUser } from '../../../../shared/common/decorators/current-user.d
 import { Roles } from '../../../../shared/common/decorators/roles.decorator';
 import { ShipmentService } from '../../application/services/shipment.service';
 import { ShippingQuoteService } from '../../application/services/shipping-quote.service';
-import { CreateShipmentDto, QuoteShipmentDto } from './dto/shipping.dto';
+import {
+  CreateShipmentDto,
+  QuoteShipmentDto,
+  SelectShippingRateDto,
+} from './dto/shipping.dto';
 
 @ApiTags('shipping — skydropx')
 @ApiBearerAuth()
@@ -26,6 +30,21 @@ export class ShippingController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.quoteService.quoteForOrder(orderId, user, dto);
+  }
+
+  /**
+   * Accepts one of the quoted rates. `shipping:read` on purpose: choosing a
+   * rate buys nothing — it prices the order. `shipping:write` is what spends
+   * money, and a customer must never hold it.
+   */
+  @Post('orders/:orderId/shipping/selection')
+  @Roles('shipping:read')
+  selectRate(
+    @Param('orderId') orderId: string,
+    @Body() dto: SelectShippingRateDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.quoteService.selectRate(orderId, dto.rateId, user);
   }
 
   @Post('orders/:orderId/shipping/shipments')

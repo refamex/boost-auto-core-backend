@@ -1,4 +1,9 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import {
+  ApiProperty,
+  ApiPropertyOptional,
+  OmitType,
+  PartialType,
+} from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEmail,
@@ -78,7 +83,22 @@ export class CreateCustomerDto {
  * `ReassignCustomerOwnerDto`) are intentionally excluded — each has its own
  * guarded route rather than being smuggled through a general update.
  */
-export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {
+/**
+ * `ownerSalesRepId` and `authCustomerId` are both excluded, but by different
+ * mechanisms, and the difference is what used to leak.
+ *
+ * `ownerSalesRepId` is never declared on `CreateCustomerDto` (D7), so
+ * `whitelist + forbidNonWhitelisted` rejects it on its own. `authCustomerId`
+ * IS declared there, so inheriting the whole shape let `PATCH
+ * /v1/customers/:id` re-point an already-linked profile at another UUID — the
+ * exact re-link `POST :id/link` guards with `canLink()`, reached through a
+ * second door that called no guard and orphaned the orders, quotes and
+ * billing joins. `OmitType` drops it from the inherited shape so the pipe
+ * answers 400 for both.
+ */
+export class UpdateCustomerDto extends PartialType(
+  OmitType(CreateCustomerDto, ['authCustomerId'] as const),
+) {
   @ApiPropertyOptional()
   @IsBoolean()
   @IsOptional()

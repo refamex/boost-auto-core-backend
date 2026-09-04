@@ -134,6 +134,31 @@ export const validationSchema = Joi.object({
     .min(0)
     .default(1000),
 
+  // Requeridas SOLO con STORAGE_ENABLED=true. Un arranque local sin bucket
+  // sigue siendo valido; una produccion que dice tener storage y no lo tiene,
+  // no — fallaria en la primera subida, con el usuario mirando.
+  STORAGE_ENABLED: Joi.boolean().default(false),
+  AWS_REGION: Joi.string().when('STORAGE_ENABLED', {
+    is: true,
+    then: Joi.required(),
+  }),
+  AWS_ACCESS_KEY_ID: Joi.string().when('STORAGE_ENABLED', {
+    is: true,
+    then: Joi.required(),
+  }),
+  AWS_SECRET_ACCESS_KEY: Joi.string().when('STORAGE_ENABLED', {
+    is: true,
+    then: Joi.required(),
+  }),
+  S3_BUCKET: Joi.string().when('STORAGE_ENABLED', {
+    is: true,
+    then: Joi.required(),
+  }),
+  S3_PUBLIC_BASE_URL: Joi.string().uri().when('STORAGE_ENABLED', {
+    is: true,
+    then: Joi.required(),
+  }),
+
   NOTIFICATIONS_EMAIL_ENABLED: Joi.boolean().default(false),
 
   // Same shape as the JWT production gate (D9): a misconfiguration that would

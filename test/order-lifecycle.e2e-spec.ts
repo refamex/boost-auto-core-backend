@@ -12,6 +12,8 @@ import * as request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { describeWithDocker } from './docker-gate';
+import { AllExceptionsFilter } from '../src/shared/common/filters/http-exception.filter';
+import { DomainExceptionFilter } from '../src/shared/common/filters/domain-exception.filter';
 
 /**
  * The order lifecycle, as a SEQUENCE.
@@ -53,6 +55,10 @@ describeWithDocker('order lifecycle (e2e)', () => {
   const buyer = (id = CUSTOMER): Record<string, string> => ({
     'X-User-Id': id,
     'X-Roles': 'orders:create,shipping:read',
+    // Order creation requires a finished customer profile. The header is the
+    // mock-auth stand-in for the `profile_complete` claim, and it fails closed,
+    // so every shopper in this suite has to state it.
+    'X-Profile-Complete': 'true',
   });
 
   const staff = (): Record<string, string> => ({
@@ -151,6 +157,12 @@ describeWithDocker('order lifecycle (e2e)', () => {
         transform: true,
         transformOptions: { enableImplicitConversion: false },
       }),
+    );
+    // Mirrors bootstrap: without these, a DomainError surfaces as a 500 here
+    // and as its real status in production.
+    app.useGlobalFilters(
+      new AllExceptionsFilter(),
+      new DomainExceptionFilter(),
     );
     await app.init();
   });

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -23,6 +24,7 @@ import { PriceListService } from '../../../commerce/application/services/price-l
 import { documentPriceListCode } from '../../../commerce/domain/document-price-list-code';
 import { PriceListEntity } from '../../../commerce/domain/entities/price-list.entity';
 import { CustomerProfileService } from '../../../customers/application/services/customer-profile.service';
+import { CustomerProfileEntity } from '../../../customers/domain/entities/customer-profile.entity';
 import { OrderService } from '../../../orders/application/services/order.service';
 import { priceLine, round2 } from '../../../orders/domain/order-pricing';
 import { CreateOrderDto } from '../../../orders/infrastructure/http/dto/order.dto';
@@ -35,6 +37,7 @@ import {
   QuoteEffectiveStatus,
   isEditable,
 } from '../../domain/quote-status';
+import { negotiatedPrice } from '../../domain/quote-pricing';
 import { buildWhere, effectiveStatus } from '../../domain/quote-visibility';
 import {
   CreateQuoteDto,
@@ -103,9 +106,13 @@ export class QuoteService {
   ): Promise<QuoteView> {
     const salesRepId = this.assertRep(user);
     const now = new Date();
-    const priceList = await this.applicableList(
-      dto.customerId,
-      dto.priceListCode,
+    const target = await this.resolveTarget(user, dto);
+    const priceList = await this.priceLists.findApplicableOrNull(
+      documentPriceListCode({
+        honorBodyCode: true,
+        bodyCode: dto.priceListCode,
+        profileCode: target.profile?.priceListCode,
+      }),
     );
     const { items, subtotal, taxTotal } = await this.priceItems(
       dto.items,
@@ -117,7 +124,8 @@ export class QuoteService {
       const quote = await tx.getRepository(QuoteEntity).save(
         tx.getRepository(QuoteEntity).create({
           quoteNumber: this.generateQuoteNumber(),
-          customerId: dto.customerId,
+          customerId: target.customerId,
+          customerProfileId: target.profile?.id ?? null,
           salesRepId,
           priceListId: priceList?.id ?? null,
           currency: priceList?.currency ?? 'MXN',
@@ -165,9 +173,20 @@ export class QuoteService {
       );
     }
 
-    const priceList = await this.applicableList(
-      existing.customerId,
-      dto.priceListCode,
+    // Re-pricing resolves the customer's list from whichever identifier the
+    // quote carries. `customerProfileId` is preferred and read directly: it is
+    // present even for a prospect, whose `customerId` is still NULL.
+    const profile = existing.customerProfileId
+      ? await this.profiles.findById(existing.customerProfileId, user)
+      : existing.customerId
+        ? await this.profiles.findByAuthCustomerId(existing.customerId)
+        : null;
+    const priceList = await this.priceLists.findApplicableOrNull(
+      documentPriceListCode({
+        honorBodyCode: true,
+        bodyCode: dto.priceListCode,
+        profileCode: profile?.priceListCode,
+      }),
     );
     const resolvedId = priceList?.id ?? null;
     const shouldReprice =
@@ -180,9 +199,17 @@ export class QuoteService {
       if (shouldReprice) {
         const lines =
           dto.items ??
+          // The DISCOUNT carries forward, not the absolute price.
+          //
+          // Rebuilding from productId and qty alone would silently reset every
+          // discount the rep agreed. But carrying the old price instead would
+          // be worse: re-pricing exists precisely to pick up a new list, and a
+          // frozen price would ignore it forever. Keeping the percentage does
+          // both — "10% off" stays 10% off, of whatever the list says now.
           (existing.items ?? []).map((i) => ({
             productId: i.productId,
             qty: i.qty,
+            discountPct: i.discountPct || undefined,
           }));
         const { items, subtotal, taxTotal } = await this.priceItems(
           lines,
@@ -382,6 +409,48 @@ export class QuoteService {
     );
   }
 
+  /**
+   * Works out who a new quote is for, from either identifier.
+   *
+   * Exactly one must be sent. Accepting both would mean deciding which wins
+   * when they disagree, and either answer silently contradicts the caller;
+   * accepting neither would write a quote nobody owns.
+   *
+   * The profile path also VALIDATES, which the auth-id path never could: it
+   * loads the profile through `loadVisible`, so a rep can only quote a customer
+   * in its own portfolio, and a wrong id is a 404 rather than a quote addressed
+   * to nobody. That was the real defect of taking a raw `customerId` — core
+   * accepted any UUID and the quote simply never reached anyone.
+   */
+  private async resolveTarget(
+    user: AuthenticatedUser,
+    dto: CreateQuoteDto,
+  ): Promise<{
+    customerId: string | null;
+    profile: CustomerProfileEntity | null;
+  }> {
+    const { customerId, customerProfileId } = dto;
+
+    if (Boolean(customerId) === Boolean(customerProfileId)) {
+      throw new BadRequestException(
+        'send exactly one of customerId or customerProfileId',
+      );
+    }
+
+    if (customerProfileId) {
+      const profile = await this.profiles.findById(customerProfileId, user);
+      // NULL while the customer is a prospect: `link()` fills it in later.
+      return { customerId: profile.authCustomerId ?? null, profile };
+    }
+
+    // Legacy path, kept for callers that already send an auth id. It cannot be
+    // validated — core does not own that identity — so it stays as-is.
+    return {
+      customerId: customerId!,
+      profile: await this.profiles.findByAuthCustomerId(customerId!),
+    };
+  }
+
   private async priceItems(
     lines: CreateQuoteItemDto[],
     priceList: PriceListEntity | null,
@@ -405,12 +474,21 @@ export class QuoteService {
         ? await this.resolvePrice(priceList.id, line.productId, line.qty, now)
         : this.cataloguePrice(product);
 
+      const listPrice = priced.price;
+      const { effective, discountPct } = negotiatedPrice({
+        listPrice,
+        unitPrice: line.unitPrice,
+        discountPct: line.discountPct,
+      });
+
       // Tax is computed, never echoed from the request. A rep could otherwise
       // quote tax 0, approve it, and convert it into an order that carries the
       // snapshot — reopening from inside the hole `create` closes at the edge.
+      // The negotiated price is an input to that computation, never a way
+      // around it.
       const { net, tax, lineTotal } = priceLine({
         qty: line.qty,
-        unitPrice: priced.price,
+        unitPrice: effective,
         taxRate,
       });
       subtotal = round2(subtotal + net);
@@ -422,7 +500,9 @@ export class QuoteService {
         skuSnapshot: product.sku,
         nameSnapshot: product.name ?? product.sku,
         qty: line.qty,
-        unitPriceSnapshot: priced.price,
+        listPriceSnapshot: listPrice,
+        discountPct,
+        unitPriceSnapshot: effective,
         taxSnapshot: tax,
         lineTotal,
       });

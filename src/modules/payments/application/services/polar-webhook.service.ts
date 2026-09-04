@@ -1,13 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, QueryFailedError, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { OrderPaymentEntity } from '../../../orders/domain/entities/order-payment.entity';
 import { NotificationEmittedEvent } from '../../../notifications/domain/notification-emitted.event';
 import { NotificationEventKey } from '../../../notifications/domain/notification-event';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
 import { PolarCheckoutEntity } from '../../domain/entities/polar-checkout.entity';
 import { WebhookEventEntity } from '../../domain/entities/webhook-event.entity';
+import { insertIfNew } from '../../../../shared/database/insert-if-new';
 
 type PolarWebhookPayload = {
   type: string;
@@ -63,26 +64,14 @@ export class PolarWebhookService {
   async handle(event: PolarWebhookPayload): Promise<void> {
     const polarEventId = `${event.type}:${event.data.id}`;
 
-    try {
-      await this.webhookRepo.save(
-        this.webhookRepo.create({
-          polarEventId,
-          eventType: event.type,
-          payloadJson: JSON.parse(JSON.stringify(event)) as Record<
-            string,
-            unknown
-          >,
-        }),
-      );
-    } catch (e) {
-      if (
-        e instanceof QueryFailedError &&
-        (e as { code?: string }).code === '23505'
-      ) {
-        this.logger.debug(`Duplicate webhook ${polarEventId}, skipping`);
-        return;
-      }
-      throw e;
+    const isNew = await insertIfNew(this.webhookRepo, {
+      polarEventId,
+      eventType: event.type,
+      payloadJson: JSON.parse(JSON.stringify(event)) as Record<string, unknown>,
+    });
+    if (!isNew) {
+      this.logger.debug(`Duplicate webhook ${polarEventId}, skipping`);
+      return;
     }
 
     try {

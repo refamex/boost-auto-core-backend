@@ -96,6 +96,24 @@ export class ProductEntity {
   @Column({ type: 'boolean', name: 'is_visible', default: true })
   isVisible!: boolean;
 
+  /**
+   * Claves del catalogo SAT, obligatorias POR CONCEPTO en un CFDI 4.0.
+   *
+   * Nullable porque poblar 7.878 productos es trabajo de datos, no de codigo.
+   * Pero sin ellas no se timbra, aunque el PAC este contratado — y eso es una
+   * bandera para quien planifique, no un detalle tecnico.
+   */
+  @Column({
+    type: 'varchar',
+    length: 8,
+    name: 'clave_prod_serv',
+    nullable: true,
+  })
+  claveProdServ?: string | null;
+
+  @Column({ type: 'varchar', length: 3, name: 'clave_unidad', nullable: true })
+  claveUnidad?: string | null;
+
   @Column({ type: 'text', name: 'principal_image', nullable: true })
   principalImage?: string | null;
 

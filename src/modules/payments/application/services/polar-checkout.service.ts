@@ -10,16 +10,12 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
 import { AppConfig } from '../../../../shared/config/configuration';
+import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
 import { OrderEntity } from '../../../orders/domain/entities/order.entity';
+import { tierOf } from '../../../orders/domain/order-visibility';
+import { TERMINAL_CHECKOUT_STATUSES } from '../../domain/checkout-status';
 import { PolarCheckoutEntity } from '../../domain/entities/polar-checkout.entity';
 import { POLAR_CLIENT, PolarClient } from '../ports/polar.client';
-
-const TERMINAL_CHECKOUT_STATUSES = [
-  'succeeded',
-  'confirmed',
-  'expired',
-  'failed',
-];
 
 @Injectable()
 export class PolarCheckoutService {
@@ -40,11 +36,24 @@ export class PolarCheckoutService {
     }
   }
 
-  async createForOrder(orderId: string): Promise<PolarCheckoutEntity> {
+  private async findVisibleOrder(
+    orderId: string,
+    user: AuthenticatedUser,
+  ): Promise<OrderEntity> {
+    const order = await this.orderRepo.findOne({ where: { id: orderId } });
+    if (!order || (tierOf(user) !== 'admin' && order.customerId !== user.id)) {
+      throw new NotFoundException(`Order ${orderId} not found`);
+    }
+    return order;
+  }
+
+  async createForOrder(
+    orderId: string,
+    user: AuthenticatedUser,
+  ): Promise<PolarCheckoutEntity> {
     this.assertEnabled();
 
-    const order = await this.orderRepo.findOne({ where: { id: orderId } });
-    if (!order) throw new NotFoundException(`Order ${orderId} not found`);
+    const order = await this.findVisibleOrder(orderId, user);
     if (order.grandTotal <= 0) {
       throw new BadRequestException(
         'Order grandTotal must be greater than zero',
@@ -52,6 +61,21 @@ export class PolarCheckoutService {
     }
     if (order.paymentStatus === 'paid') {
       throw new ConflictException('Order is already paid');
+    }
+
+    // The freight guard. `grand_total` includes shipping only once a rate has
+    // been accepted, and `shipping_quoted_at` is the only thing that says so.
+    // Without this check, posting straight to this endpoint — skipping the
+    // quote screen entirely — charges `subtotal + tax` and ships for free,
+    // which is exactly what production did on every order until now.
+    //
+    // Checked on the order rather than `shipping_total > 0`: a genuinely free
+    // shipment and an unquoted one are both zero, and only one of them may be
+    // charged.
+    if (order.shippingQuotedAt == null) {
+      throw new ConflictException(
+        'Shipping has not been quoted for this order. Accept a shipping rate before paying.',
+      );
     }
 
     const open = await this.checkoutRepo.findOne({
@@ -85,7 +109,11 @@ export class PolarCheckoutService {
     );
   }
 
-  async findLatestByOrder(orderId: string): Promise<PolarCheckoutEntity> {
+  async findLatestByOrder(
+    orderId: string,
+    user: AuthenticatedUser,
+  ): Promise<PolarCheckoutEntity> {
+    await this.findVisibleOrder(orderId, user);
     const found = await this.checkoutRepo.findOne({
       where: { orderId },
       order: { createdAt: 'DESC' },

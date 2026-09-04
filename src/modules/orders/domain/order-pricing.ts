@@ -82,3 +82,36 @@ export function priceLine({
 export function quotedPriceMatches(claimed: number, resolved: number): boolean {
   return round2(Math.abs(claimed - resolved)) <= PRICE_ASSERTION_TOLERANCE;
 }
+
+export interface OrderTotalsInput {
+  /** Sum of the line nets. */
+  subtotal: number;
+  taxTotal: number;
+  /** What the carrier charges. Zero until a rate is selected. */
+  shippingTotal?: number;
+  discountTotal?: number;
+}
+
+/**
+ * The one place an order's charged amount is computed.
+ *
+ * WHY IT EXISTS: `round2(subtotal + taxTotal)` used to be written inline in
+ * `OrderService`, and `PolarCheckoutService` charges the result verbatim. Once
+ * freight has to land in that number too, the expression appears in two places
+ * — order creation and rate selection — and the day they disagree is the day a
+ * customer is charged something nobody displayed.
+ *
+ * FREIGHT IS NOT TAXED AGAIN. The amount Skydropx returns is the final price of
+ * the service, so it is added after `taxTotal` rather than folded into the
+ * taxable base. Putting it through `taxRate` would invent a charge the carrier
+ * never quoted, and it would make the stored `tax_total` stop reconciling with
+ * the sum of the line taxes.
+ */
+export function orderGrandTotal({
+  subtotal,
+  taxTotal,
+  shippingTotal = 0,
+  discountTotal = 0,
+}: OrderTotalsInput): number {
+  return round2(subtotal + taxTotal + shippingTotal - discountTotal);
+}

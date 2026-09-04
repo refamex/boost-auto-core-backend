@@ -111,6 +111,55 @@ export class CreateOrderDto {
   @IsOptional()
   shipToEmail?: string;
 
+  /**
+   * The destination itself.
+   *
+   * These columns have existed since `AddShippingSchema` and NO HTTP route
+   * could write them: the DTO exposed only name/phone/email, and
+   * `forbidNonWhitelisted` turned any attempt to send a street into a 400. The
+   * address lived in the browser's localStorage instead, so a customer who
+   * changed device lost it and the label could never be generated.
+   *
+   * All optional, because `createInternal` (a quote converted to an order)
+   * carries no address and must not start failing.
+   */
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  shipToCompany?: string;
+
+  @ApiPropertyOptional({ description: 'Calle y número.' })
+  @IsString()
+  @IsOptional()
+  shipToStreet1?: string;
+
+  @ApiPropertyOptional({
+    description: 'Código postal. Decide tarifa y cobertura.',
+  })
+  @IsString()
+  @IsOptional()
+  shipToPostalCode?: string;
+
+  @ApiPropertyOptional({ description: 'Estado (Skydropx: areaLevel1).' })
+  @IsString()
+  @IsOptional()
+  shipToAreaLevel1?: string;
+
+  @ApiPropertyOptional({ description: 'Municipio (Skydropx: areaLevel2).' })
+  @IsString()
+  @IsOptional()
+  shipToAreaLevel2?: string;
+
+  @ApiPropertyOptional({ description: 'Colonia (Skydropx: areaLevel3).' })
+  @IsString()
+  @IsOptional()
+  shipToAreaLevel3?: string;
+
+  @ApiPropertyOptional({ default: 'MX' })
+  @IsString()
+  @IsOptional()
+  shipToCountryCode?: string;
+
   @ApiProperty({ type: [CreateOrderItemDto] })
   @IsArray()
   @ValidateNested({ each: true })

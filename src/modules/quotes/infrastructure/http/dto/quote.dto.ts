@@ -15,6 +15,7 @@ import {
   IsString,
   IsUUID,
   MinDate,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -31,6 +32,32 @@ export class CreateQuoteItemDto {
   @Min(0.01)
   @Type(() => Number)
   qty!: number;
+
+  /**
+   * Negotiated unit price, overriding the customer's price list for this line.
+   *
+   * The list price is still resolved and stored in `list_price_snapshot`, so
+   * what was given away stays visible after the fact.
+   */
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Min(0)
+  @IsOptional()
+  @Type(() => Number)
+  unitPrice?: number;
+
+  /**
+   * Percentage off the list price for this line. Mutually exclusive with
+   * `unitPrice` — sending both would mean deciding which one wins, and either
+   * answer silently contradicts the caller.
+   */
+  @ApiPropertyOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  @IsOptional()
+  @Type(() => Number)
+  discountPct?: number;
 
   /**
    * @deprecated Accepted and IGNORED, matching CreateOrderItemDto. Tax is
@@ -50,9 +77,29 @@ export class CreateQuoteItemDto {
 }
 
 export class CreateQuoteDto {
-  @ApiProperty()
+  /**
+   * The customer's AUTH identity. Only usable for a customer who already has a
+   * platform account, which is why it is no longer required: a rep quoting
+   * someone they just met has no way to know this value.
+   *
+   * Exactly one of `customerId` / `customerProfileId` must be sent —
+   * `QuoteService.create` rejects both-or-neither. Prefer `customerProfileId`:
+   * it works for prospects too, and it is what a customer picker can offer.
+   */
+  @ApiPropertyOptional()
   @IsUUID()
-  customerId!: string;
+  @IsOptional()
+  customerId?: string;
+
+  /**
+   * A row in `customers.customer_profile` — the rep's own portfolio. Works
+   * whether or not that customer has signed up: if they have, the account is
+   * resolved from the profile; if not, the quote waits for `link()`.
+   */
+  @ApiPropertyOptional()
+  @IsUUID()
+  @IsOptional()
+  customerProfileId?: string;
 
   /** Staff override. Omitted resolves from the quote customer's profile, then default, then catalogue. */
   @ApiPropertyOptional()

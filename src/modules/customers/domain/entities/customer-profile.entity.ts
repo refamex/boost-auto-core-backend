@@ -38,6 +38,30 @@ export class CustomerProfileEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   rfc?: string | null;
 
+  /**
+   * Los tres campos fiscales que el CFDI 4.0 exige y que no existian en ningun
+   * repositorio. `tax_regime` vivia SOLO en autoboost-auth; el uso de CFDI y el
+   * codigo postal fiscal, en ninguna parte.
+   */
+  @Column({ type: 'varchar', length: 5, name: 'tax_regime', nullable: true })
+  taxRegime?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 5,
+    name: 'uso_cfdi_default',
+    nullable: true,
+  })
+  usoCfdiDefault?: string | null;
+
+  @Column({
+    type: 'varchar',
+    length: 10,
+    name: 'fiscal_postal_code',
+    nullable: true,
+  })
+  fiscalPostalCode?: string | null;
+
   @Column({
     type: 'varchar',
     length: 50,

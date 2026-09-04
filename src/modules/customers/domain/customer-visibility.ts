@@ -56,13 +56,28 @@ export function buildWhere(
  * profile (or a branch's parent profile) instead of a query predicate. Lives
  * here — not duplicated in `customer-branch.service.ts` — so the two checks
  * never drift, mirroring why `buildWhere` itself exists (D2).
+ *
+ * PLUS A THIRD TIER, added when the shipping address book became self-service:
+ * the customer the profile BELONGS TO. Without it a shopper could list their
+ * own addresses but not edit one, because `CustomerBranchService.findById`
+ * would 404 on a row they own.
+ *
+ * Deliberately NOT mirrored into `buildWhere`. That function backs
+ * `GET /v1/customers`, an unfiltered staff listing; widening it would turn
+ * "see your own profile" into "page through the book". The self-service routes
+ * resolve the one profile by `auth_customer_id` instead, and never take a
+ * caller-supplied id at all.
  */
 export function isVisibleToUser(
-  profile: { ownerSalesRepId?: string | null } | null | undefined,
+  profile:
+    | { ownerSalesRepId?: string | null; authCustomerId?: string | null }
+    | null
+    | undefined,
   user: AuthenticatedUser,
 ): boolean {
   if (!profile) return false;
   if (user.roles.includes('customers:admin')) return true;
+  if (profile.authCustomerId && profile.authCustomerId === user.id) return true;
   return (
     Boolean(user.salesRepId) && profile.ownerSalesRepId === user.salesRepId
   );

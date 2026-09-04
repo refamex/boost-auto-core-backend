@@ -33,8 +33,9 @@
 23. [Integrations](#23-integrations)
 24. [Payments — Polar.sh](#24-payments--polarsh)
 25. [Shipping — Skydropx](#25-shipping--skydropx)
-26. [Modelo de datos (campos)](#26-modelo-de-datos-campos)
-27. [Catálogo de errores](#27-catálogo-de-errores)
+26. [Notifications](#26-notifications)
+27. [Modelo de datos (campos)](#27-modelo-de-datos-campos)
+28. [Catálogo de errores](#28-catálogo-de-errores)
 
 ---
 
@@ -149,7 +150,7 @@ Las lecturas de PIM, Suppliers, Vehicles, Compatibility, Commerce, Orders, Sales
 | `SKYDROPX_CLIENT_ID` | sí | OAuth2 client id |
 | `SKYDROPX_CLIENT_SECRET` | sí | OAuth2 client secret |
 | `SKYDROPX_SERVER` | no | `sandbox` (default) o `production` |
-| `SKYDROPX_WEBHOOK_SECRET` | sí | Secreto para validar firma HMAC del webhook |
+| `SKYDROPX_WEBHOOK_SECRET` | sí | Token configurado en el panel de Skydropx; se compara con el header `Authorization` |
 | `SKYDROPX_ORIGIN_NAME` | sí | Nombre remitente (origen) |
 | `SKYDROPX_ORIGIN_COMPANY` | no | Empresa remitente |
 | `SKYDROPX_ORIGIN_STREET1` | sí | Calle y número origen |
@@ -232,7 +233,7 @@ Errores de validación / HTTP estándar (Nest):
 { "statusCode": 400, "message": ["sku should not be empty"], "error": "Bad Request" }
 ```
 
-Ver el [catálogo completo](#27-catálogo-de-errores).
+Ver el [catálogo completo](#28-catálogo-de-errores).
 
 ### IDs
 
@@ -967,7 +968,7 @@ Integración con Skydropx para cotizar, crear y rastrear envíos asociados a `or
 | GET | `/v1/orders/:orderId/shipping/shipment` | `shipping:read` | Obtiene el último envío del pedido (incluye `trackingEvents`) |
 | POST | `/v1/shipping/shipments/:id/cancel` | `shipping:write` | Cancela un envío en estado cancelable |
 | GET | `/v1/shipping/shipments/:id/tracking` | `shipping:read` | Consulta tracking on-demand y persiste eventos nuevos |
-| POST | `/v1/shipping/webhooks/skydropx` | `@Public` + firma HMAC | Recibe eventos asíncronos de Skydropx |
+| POST | `/v1/shipping/webhooks/skydropx` | `@Public` + token en `Authorization` | Recibe eventos asíncronos de Skydropx |
 
 ### Requisitos de datos en el pedido para cotizar
 
@@ -1000,10 +1001,12 @@ Si faltan, `POST /shipping/quotes` responde **400**. También puedes enviar over
 
 Configurar en Skydropx:
 - Endpoint: `https://<host>/v1/shipping/webhooks/skydropx`
-- Firma HMAC en header `x-skydropx-signature` (validada con `SKYDROPX_WEBHOOK_SECRET`)
+- Autenticación: método **Token**; Skydropx envía el valor en el header `Authorization` (se compara con `SKYDROPX_WEBHOOK_SECRET`)
 
 Procesamiento:
-- Idempotencia por `skydropx_event_id = {type}:{event.id || data.id || data.shipment_id}`.
+- Payload en formato JSON:API (`{ data: { id, type, attributes } }`); se aplana antes de procesar (`type` desde `data.type`, y `status`/`tracking_number`/`occurred_at` desde `data.attributes` si no vienen en `data`).
+- Idempotencia por `skydropx_event_id = {type}:{id}`; sin `type` se usa `unknown`, y sin `id` una huella SHA-256 del payload.
+- Eventos que no corresponden a un envío (por ejemplo `orders` sincronizados desde la tienda) se registran y se ignoran, respondiendo **200**.
 - Si llega `status`, se actualiza `shipping.shipments.status`.
 - También se sincroniza `orders.shipping_status` (`in_transit`, `out_for_delivery`, `delivered`, `exception`, `cancelled`).
 - Se persiste evento en `shipping.shipment_tracking_events`.
@@ -1022,7 +1025,40 @@ Procesamiento:
 
 ---
 
-## 26. Modelo de datos (campos)
+## 26. Notifications
+
+Recursos: `notifications.notifications`, `notifications.notification_outbox`. Base: `/v1/notifications`.
+
+Feed en-app del cliente. Toda la escritura es interna: las filas nacen de eventos de dominio (`order.*`, `payment.*`, `shipment.*`, `invoice.*`), nunca de una llamada HTTP. Los endpoints son solo de lectura y de marcado.
+
+| Método | Path | Auth | Body / Params |
+|--------|------|------|---------------|
+| GET | `/v1/notifications` | Bearer | query: `page?`, `limit?`, `unreadOnly?` — paginado |
+| GET | `/v1/notifications/unread-count` | Bearer | → `{ unread }` |
+| POST | `/v1/notifications/read-all` | Bearer | → **200** `{ updated }` |
+| PATCH | `/v1/notifications/:id/read` | Bearer | UUID → la notificación |
+
+Todos van scopeados al `sub` del token: no hay permiso `module:action` que pedir, porque un usuario solo puede leer las suyas. Un `:id` ajeno responde **404**, no 403 — la consulta filtra por destinatario, así que "no existe" y "no es tuya" son la misma respuesta y el endpoint no confirma nada.
+
+### El campo `link`
+
+`link` es el deep link al storefront (`boost-auto-client-app`) y **se recalcula en cada respuesta** a partir de `eventKey` + `entityId`, vía `linkFor()` en [notification-event.ts](../src/modules/notifications/domain/notification-event.ts). La columna homónima guarda el valor del día que se creó la fila y puede quedar atrás; la API nunca la devuelve tal cual.
+
+Es una decisión, no un detalle: las rutas del storefront alguna vez fueron `/cuenta/pedido/:id` y `/cuenta/facturas/:id`, paths que ninguna ruta sirvió jamás, y como el link se persistía cada notificación vieja quedó apuntando a un 404 permanente. Derivando en lectura, renombrar una ruta del cliente solo exige tocar `linkFor`, nunca una migración de datos.
+
+Valores actuales:
+
+| Evento | `link` |
+|--------|--------|
+| `order.*`, `payment.*`, `shipment.*` | `/orders/:entityId` |
+| `invoice.available` | `/account/invoices` |
+| `system.*` | `null` — su `entityId` es el tipo de job del feed, no un documento del cliente |
+
+`null` es un valor válido de extremo a extremo: la columna es nullable y el cliente solo navega cuando hay link.
+
+---
+
+## 27. Modelo de datos (campos)
 
 Resumen de las entidades expuestas. La fuente de verdad del schema son las **3 migraciones** ([InitialSchema](../src/shared/database/migrations/1700000000000-InitialSchema.ts) + [AddPaymentsPolarSchema](../src/shared/database/migrations/1779738126223-AddPaymentsPolarSchema.ts) + [AddShippingSchema](../src/shared/database/migrations/1779738126224-AddShippingSchema.ts)) y [db.md](../db.md) (nota: `db.md` aún no incluye el esquema `shipping`). El DDL completo de los **12 esquemas de negocio** (`pim`, `suppliers`, `vehicles`, `compatibility`, `inventory`, `commerce`, `orders`, `sales`, `billing`, `integrations`, `payments`, `shipping`) vive en esas migraciones.
 
@@ -1103,7 +1139,7 @@ Resumen de las entidades expuestas. La fuente de verdad del schema son las **3 m
 
 ---
 
-## 27. Catálogo de errores
+## 28. Catálogo de errores
 
 | HTTP | `code` | Origen | Cuándo |
 |------|--------|--------|--------|

@@ -5,6 +5,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { AuthenticatedUser } from '../../../../shared/auth/jwt-payload.interface';
+import { ProfileIncompleteError } from '../../domain/order-errors';
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
 import { OrderStatusEventEntity } from '../../domain/entities/order-status-event.entity';
 import { OrderEntity } from '../../domain/entities/order.entity';
@@ -17,7 +18,17 @@ const TAX_RATE = 0.16;
 /** What `pim.product.price` says for product 1 unless a test overrides it. */
 const CATALOGUE_PRICE = 100;
 
-const customer: AuthenticatedUser = { id: 'customer-1', roles: [] };
+/**
+ * `profileComplete` is set because these suites are about pricing and
+ * ownership, not about onboarding. Without it every one of them would fail on
+ * the customer-profile gate — which is the gate doing its job, and is asserted
+ * on its own in the `create: customer profile gate` block below.
+ */
+const customer: AuthenticatedUser = {
+  id: 'customer-1',
+  roles: [],
+  profileComplete: true,
+};
 const staff: AuthenticatedUser = { id: 'admin-user', roles: ['admin'] };
 
 function makeOrder(over: Partial<OrderEntity> = {}): OrderEntity {
@@ -210,6 +221,83 @@ describe('OrderService', () => {
         expect.objectContaining({ customerId: 'customer-1', status: 'draft' }),
       );
       expect(reserveStock.execute).not.toHaveBeenCalled();
+    });
+
+    /**
+     * "No podrá realizar pedidos" — the whole point of the change.
+     *
+     * Read from the token: auth owns the customer profile and mints
+     * `profile_complete` next to the identity claims this service already
+     * trusts, so there is no HTTP hop to auth on the order path.
+     */
+    describe('customer profile gate', () => {
+      const incomplete: AuthenticatedUser = { id: 'customer-1', roles: [] };
+
+      it('refuses a customer whose profile is incomplete, and writes no row', async () => {
+        await expect(
+          service.create(makeCreateDto(), incomplete),
+        ).rejects.toMatchObject({
+          code: 'CUSTOMER_PROFILE_INCOMPLETE',
+          httpStatus: 409,
+        });
+        expect(orderTxRepo.save).not.toHaveBeenCalled();
+      });
+
+      it('treats a token minted before the claim existed as incomplete', async () => {
+        // Omission is the safe direction: a shopper is asked to fill in a form,
+        // rather than buying with no fiscal data on file.
+        await expect(
+          service.create(makeCreateDto(), {
+            id: 'customer-1',
+            roles: [],
+            profileComplete: undefined,
+          }),
+        ).rejects.toThrow(ProfileIncompleteError);
+      });
+
+      it('lets a customer with a complete profile through', async () => {
+        readBackPersistedOrder();
+        await service.create(makeCreateDto(), customer);
+        expect(orderTxRepo.save).toHaveBeenCalled();
+      });
+
+      it('never gates an employee, complete profile or not', async () => {
+        // An employee is not a customer and has no fiscal profile to fill in.
+        readBackPersistedOrder();
+        await service.create(makeCreateDto(), {
+          id: 'customer-1',
+          roles: [],
+          employeeId: 'employee-9',
+        });
+        expect(orderTxRepo.save).toHaveBeenCalled();
+      });
+
+      it('never gates staff', async () => {
+        readBackPersistedOrder();
+        await service.create(
+          makeCreateDto({ customerId: 'someone-else' }),
+          staff,
+        );
+        expect(orderTxRepo.save).toHaveBeenCalled();
+      });
+
+      it('does NOT gate createInternal — a rep converting a quote', async () => {
+        // That order belongs to a customer who may be a prospect with no
+        // account at all, so gating the shared `persist()` would break the B2B
+        // path this check has nothing to do with.
+        readBackPersistedOrder();
+        await service.createInternal(makeCreateDto());
+        expect(orderTxRepo.save).toHaveBeenCalled();
+      });
+
+      it('runs the check before any pricing lookup', async () => {
+        // A blocked order should cost nothing: no product load, no price list.
+        productRepo.find.mockClear();
+        await expect(
+          service.create(makeCreateDto(), incomplete),
+        ).rejects.toThrow(ProfileIncompleteError);
+        expect(productRepo.find).not.toHaveBeenCalled();
+      });
     });
 
     it('rejects a customer supplying a mismatching customerId with 403, and writes no row (F10)', async () => {

@@ -60,6 +60,33 @@ export class QuoteItemEntity {
   })
   qty!: number;
 
+  /**
+   * What the price list said, frozen at creation. Kept alongside the effective
+   * price so a discount stays auditable: without it, a line at 900 cannot be
+   * told apart from a 1000 list price with 10% off.
+   */
+  @Column({
+    type: 'numeric',
+    precision: 14,
+    scale: 2,
+    name: 'list_price_snapshot',
+    nullable: true,
+    transformer: numericTransformer,
+  })
+  listPriceSnapshot?: number | null;
+
+  /** Percentage taken off the list price. 0 means the list price was honoured. */
+  @Column({
+    type: 'numeric',
+    precision: 5,
+    scale: 2,
+    name: 'discount_pct',
+    default: 0,
+    transformer: numericTransformer,
+  })
+  discountPct!: number;
+
+  /** The EFFECTIVE price charged, after any manual price or discount. */
   @Column({
     type: 'numeric',
     precision: 14,
