@@ -42,11 +42,22 @@ export class AddQuoteItemDiscount1788307200000 implements MigrationInterface {
     );
     // A discount outside 0–100 is not a negotiation, it is a data error: 110%
     // would make the customer owe nothing and the line total negative.
-    await queryRunner.query(
-      `ALTER TABLE quotes.quote_items
-         ADD CONSTRAINT ck_quote_items_discount_pct
-         CHECK (discount_pct >= 0 AND discount_pct <= 100)`,
-    );
+    // Postgres has no ADD CONSTRAINT IF NOT EXISTS, and this chain is re-run
+    // against already-migrated databases. QueryRunner.query returns `any`; the
+    // cast satisfies no-unsafe-*.
+    const constraintExists = (await queryRunner.query(`
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'ck_quote_items_discount_pct'
+        AND connamespace = 'quotes'::regnamespace
+    `)) as unknown[];
+
+    if (constraintExists.length === 0) {
+      await queryRunner.query(
+        `ALTER TABLE quotes.quote_items
+           ADD CONSTRAINT ck_quote_items_discount_pct
+           CHECK (discount_pct >= 0 AND discount_pct <= 100)`,
+      );
+    }
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

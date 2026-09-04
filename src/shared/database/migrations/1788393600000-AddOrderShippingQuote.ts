@@ -25,12 +25,12 @@ export class AddOrderShippingQuote1788393600000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE orders.orders
-        ADD COLUMN shipping_quotation_id  VARCHAR(120),
-        ADD COLUMN shipping_rate_id       VARCHAR(120),
-        ADD COLUMN shipping_carrier_name  VARCHAR(120),
-        ADD COLUMN shipping_service_level VARCHAR(120),
-        ADD COLUMN shipping_quoted_at     TIMESTAMP,
-        ADD COLUMN shipping_rates_json    JSONB
+        ADD COLUMN IF NOT EXISTS shipping_quotation_id  VARCHAR(120),
+        ADD COLUMN IF NOT EXISTS shipping_rate_id       VARCHAR(120),
+        ADD COLUMN IF NOT EXISTS shipping_carrier_name  VARCHAR(120),
+        ADD COLUMN IF NOT EXISTS shipping_service_level VARCHAR(120),
+        ADD COLUMN IF NOT EXISTS shipping_quoted_at     TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS shipping_rates_json    JSONB
     `);
 
     await queryRunner.query(

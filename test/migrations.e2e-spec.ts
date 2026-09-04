@@ -72,8 +72,8 @@ const DEAD_INDEXES = [
 /** The repair migration that restored id-based indexes. */
 const REPAIR_MIGRATION = 'RestoreIdBasedIndexes1787788800000';
 
-/** The latest migration after adding customer price list code. */
-const LATEST_MIGRATION = 'AddCustomerPriceListCode1788134400000';
+/** The last migration in the chain. Update it when a later one is added. */
+const LATEST_MIGRATION = 'AddCfdiFields1788566400000';
 
 describeWithDocker('migration chain', () => {
   jest.setTimeout(240_000);

@@ -24,30 +24,30 @@ export class AddCfdiFields1788566400000 implements MigrationInterface {
     // --- El comprobante ---------------------------------------------------
     await queryRunner.query(`
       ALTER TABLE billing.invoices
-        ADD COLUMN cfdi_version               VARCHAR(10),
-        ADD COLUMN tipo_comprobante           VARCHAR(5),
-        ADD COLUMN serie                      VARCHAR(25),
-        ADD COLUMN folio                      VARCHAR(40),
-        ADD COLUMN uuid_fiscal                UUID,
-        ADD COLUMN fecha_timbrado             TIMESTAMPTZ,
-        ADD COLUMN sello_cfd                  TEXT,
-        ADD COLUMN sello_sat                  TEXT,
-        ADD COLUMN no_certificado_emisor      VARCHAR(20),
-        ADD COLUMN no_certificado_sat         VARCHAR(20),
-        ADD COLUMN cadena_original_sat        TEXT,
-        ADD COLUMN forma_pago                 VARCHAR(3),
-        ADD COLUMN metodo_pago                VARCHAR(6),
-        ADD COLUMN uso_cfdi                   VARCHAR(5),
-        ADD COLUMN regimen_fiscal_emisor      VARCHAR(5),
-        ADD COLUMN regimen_fiscal_receptor    VARCHAR(5),
-        ADD COLUMN domicilio_fiscal_receptor  VARCHAR(10)
+        ADD COLUMN IF NOT EXISTS cfdi_version               VARCHAR(10),
+        ADD COLUMN IF NOT EXISTS tipo_comprobante           VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS serie                      VARCHAR(25),
+        ADD COLUMN IF NOT EXISTS folio                      VARCHAR(40),
+        ADD COLUMN IF NOT EXISTS uuid_fiscal                UUID,
+        ADD COLUMN IF NOT EXISTS fecha_timbrado             TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS sello_cfd                  TEXT,
+        ADD COLUMN IF NOT EXISTS sello_sat                  TEXT,
+        ADD COLUMN IF NOT EXISTS no_certificado_emisor      VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS no_certificado_sat         VARCHAR(20),
+        ADD COLUMN IF NOT EXISTS cadena_original_sat        TEXT,
+        ADD COLUMN IF NOT EXISTS forma_pago                 VARCHAR(3),
+        ADD COLUMN IF NOT EXISTS metodo_pago                VARCHAR(6),
+        ADD COLUMN IF NOT EXISTS uso_cfdi                   VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS regimen_fiscal_emisor      VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS regimen_fiscal_receptor    VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS domicilio_fiscal_receptor  VARCHAR(10)
     `);
 
     // El UUID fiscal es unico en todo el SAT. Un duplicado en nuestra tabla
     // significa que se registro dos veces el mismo timbre, y es mejor que la
     // base lo rechace a que dos facturas afirmen ser la misma.
     await queryRunner.query(`
-      CREATE UNIQUE INDEX uq_invoices_uuid_fiscal
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_invoices_uuid_fiscal
         ON billing.invoices(uuid_fiscal)
         WHERE uuid_fiscal IS NOT NULL
     `);
@@ -58,10 +58,10 @@ export class AddCfdiFields1788566400000 implements MigrationInterface {
     // ni registrar.
     await queryRunner.query(`
       ALTER TABLE billing.invoices
-        ADD COLUMN cancel_status    VARCHAR(30),
-        ADD COLUMN cancel_motivo    VARCHAR(3),
-        ADD COLUMN uuid_sustitucion UUID,
-        ADD COLUMN cancelled_at     TIMESTAMPTZ
+        ADD COLUMN IF NOT EXISTS cancel_status    VARCHAR(30),
+        ADD COLUMN IF NOT EXISTS cancel_motivo    VARCHAR(3),
+        ADD COLUMN IF NOT EXISTS uuid_sustitucion UUID,
+        ADD COLUMN IF NOT EXISTS cancelled_at     TIMESTAMPTZ
     `);
 
     await queryRunner.query(
@@ -77,9 +77,9 @@ export class AddCfdiFields1788566400000 implements MigrationInterface {
     // fiscal no existian en ninguna parte, y los dos son obligatorios en 4.0.
     await queryRunner.query(`
       ALTER TABLE customers.customer_profile
-        ADD COLUMN tax_regime          VARCHAR(5),
-        ADD COLUMN uso_cfdi_default    VARCHAR(5),
-        ADD COLUMN fiscal_postal_code  VARCHAR(10)
+        ADD COLUMN IF NOT EXISTS tax_regime          VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS uso_cfdi_default    VARCHAR(5),
+        ADD COLUMN IF NOT EXISTS fiscal_postal_code  VARCHAR(10)
     `);
 
     // --- Claves SAT por producto ------------------------------------------
@@ -88,8 +88,8 @@ export class AddCfdiFields1788566400000 implements MigrationInterface {
     // no se timbra, aunque el PAC este contratado.
     await queryRunner.query(`
       ALTER TABLE pim.product
-        ADD COLUMN clave_prod_serv VARCHAR(8),
-        ADD COLUMN clave_unidad    VARCHAR(3)
+        ADD COLUMN IF NOT EXISTS clave_prod_serv VARCHAR(8),
+        ADD COLUMN IF NOT EXISTS clave_unidad    VARCHAR(3)
     `);
     await queryRunner.query(
       `COMMENT ON COLUMN pim.product.clave_prod_serv IS 'Catalogo SAT c_ClaveProdServ. Obligatoria para timbrar; hay que poblarla.'`,
