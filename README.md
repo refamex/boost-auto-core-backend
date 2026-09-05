@@ -1,10 +1,10 @@
-# AutoBoost Backend Core
+# Boost Auto Backend Core
 
 Enterprise-grade automotive catalog and e-commerce backend built with NestJS 11, TypeORM, and PostgreSQL 16.
 
 ## Description
 
-AutoBoost Backend Core is a comprehensive backend system for automotive parts and accessories catalog management, featuring:
+Boost Auto Backend Core is a comprehensive backend system for automotive parts and accessories catalog management, featuring:
 
 - **Product Information Management (PIM)** - Brands, categories, departments, products
 - **Vehicle Compatibility** - Multi-dimensional vehicle-product mapping
@@ -405,7 +405,7 @@ pnpm test -- --verbose
 
 ## License
 
-Proprietary - AutoBoost © 2026
+Proprietary - Boost Auto © 2026
 
 ## Support
 

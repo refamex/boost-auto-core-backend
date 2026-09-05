@@ -33,7 +33,7 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggingInterceptor());
 
   const swagger = new DocumentBuilder()
-    .setTitle('AutoBoost Core API')
+    .setTitle('Boost Auto Core API')
     .setDescription(
       'PIM + Suppliers + Inventory + Vehicles + Compatibility + Commerce + Orders + Sales + Billing + Integrations + Payments (Polar)',
     )

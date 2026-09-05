@@ -1,4 +1,4 @@
-# Autoboost Core — Referencia completa de la API
+# Boost Auto Core — Referencia completa de la API
 
 > Servicio de catálogo automotriz: **PIM + Suppliers + Inventory + Vehicles + Compatibility + Commerce + Orders + Sales + Billing + Integrations + Payments (Polar.sh) + Shipping (Skydropx)**.
 > Stack: **NestJS 11 + TypeORM + PostgreSQL**. Versionado URI, Swagger en `/docs`.
