@@ -117,7 +117,7 @@ export class ResendEmailChannel implements NotificationChannel {
     return [
       `<h2>${title}</h2>`,
       body ? `<p>${body}</p>` : '',
-      '<p style="color:#888;font-size:12px">Auto Boost</p>',
+      '<p style="color:#888;font-size:12px">Boost Auto</p>',
     ]
       .filter(Boolean)
       .join('\n');

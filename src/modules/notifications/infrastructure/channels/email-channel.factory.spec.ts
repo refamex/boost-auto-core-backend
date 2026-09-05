@@ -9,7 +9,7 @@ describe('createEmailChannel', () => {
         const values: Record<string, unknown> = {
           'notifications.emailEnabled': true,
           'notifications.resendApiKey': 're_live_key',
-          'notifications.mailFrom': 'Auto Boost <no-reply@autoboost.mx>',
+          'notifications.mailFrom': 'Boost Auto <no-reply@refamex.com>',
           env: 'development',
           ...over,
         };

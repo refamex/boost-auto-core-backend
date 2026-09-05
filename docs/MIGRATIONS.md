@@ -1,6 +1,6 @@
 # Database Migrations
 
-This document describes the database migrations for the AutoBoost Backend Core project.
+This document describes the database migrations for the Boost Auto Backend Core project.
 
 ## Migration Workflow
 

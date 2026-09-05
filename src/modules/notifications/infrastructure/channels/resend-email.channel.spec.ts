@@ -33,7 +33,7 @@ describe('ResendEmailChannel', () => {
     get: jest.fn((key: string) => {
       const values: Record<string, unknown> = {
         'notifications.emailEnabled': true,
-        'notifications.mailFrom': 'Auto Boost <no-reply@autoboost.mx>',
+        'notifications.mailFrom': 'Boost Auto <no-reply@refamex.com>',
         ...over,
       };
       return values[key];
@@ -83,7 +83,7 @@ describe('ResendEmailChannel', () => {
 
       expect(send).toHaveBeenCalledWith(
         expect.objectContaining({
-          from: 'Auto Boost <no-reply@autoboost.mx>',
+          from: 'Boost Auto <no-reply@refamex.com>',
           to: 'customer@example.com',
           subject: 'Your order is on its way',
         }),

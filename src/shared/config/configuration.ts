@@ -58,7 +58,7 @@ export interface NotificationsConfig {
   emailEnabled: boolean;
   /** Provider credential. Absent means fall back to the console channel. */
   resendApiKey?: string;
-  /** RFC 5322 sender, e.g. `Auto Boost <no-reply@autoboost.mx>`. */
+  /** RFC 5322 sender, e.g. `Boost Auto <no-reply@refamex.com>`. */
   mailFrom: string;
 }
 
@@ -226,6 +226,6 @@ export default (): AppConfig => ({
   notifications: {
     emailEnabled: process.env.NOTIFICATIONS_EMAIL_ENABLED === 'true',
     resendApiKey: process.env.RESEND_API_KEY,
-    mailFrom: process.env.MAIL_FROM ?? 'Auto Boost <no-reply@autoboost.mx>',
+    mailFrom: process.env.MAIL_FROM ?? 'Boost Auto <no-reply@refamex.com>',
   },
 });

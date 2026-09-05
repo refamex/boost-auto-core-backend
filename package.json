@@ -1,7 +1,7 @@
 {
   "name": "autoboost-backend-core",
   "version": "0.0.1",
-  "description": "AutoBoost backend core — PIM + suppliers + inventory + commerce + orders + billing",
+  "description": "Boost Auto backend core — PIM + suppliers + inventory + commerce + orders + billing",
   "author": "",
   "private": true,
   "license": "UNLICENSED",
